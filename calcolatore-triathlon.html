@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calcolatore Triathlon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;600&family=Manrope:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0e0f;
+    --bg-2: #16181a;
+    --ink: #f4f1ea;
+    --dim: #8a8780;
+    --line: #2a2c2f;
+    --swim: #4cc9f0;
+    --bike: #f4a261;
+    --run:  #e63946;
+    --accent: #d4ff4a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Manrope', sans-serif;
+    font-weight: 400;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse at top left, rgba(76,201,240,0.08), transparent 40%),
+      radial-gradient(ellipse at bottom right, rgba(230,57,70,0.06), transparent 50%);
+    padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+
+  /* Header */
+  .header { margin-bottom: 36px; border-bottom: 1px solid var(--line); padding-bottom: 24px; }
+  .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(48px, 10vw, 88px);
+    line-height: 0.9;
+    letter-spacing: 0.01em;
+  }
+  h1 .sub {
+    display: block;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 300;
+    font-size: 14px;
+    letter-spacing: 0.15em;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+
+  /* Mode toggle */
+  .mode {
+    display: flex;
+    gap: 6px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    padding: 4px;
+    margin-bottom: 28px;
+  }
+  .mode button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--dim);
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .mode button.active {
+    background: var(--accent);
+    color: #0d0e0f;
+    font-weight: 600;
+  }
+  .mode button:not(.active):hover { color: var(--ink); }
+
+  /* Preset chips */
+  .presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+  .presets button {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 14px 8px;
+    cursor: pointer;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    transition: all 0.15s;
+  }
+  .presets button:hover { border-color: var(--accent); }
+  .presets button.active { background: var(--accent); color: #0d0e0f; border-color: var(--accent); }
+  .presets .label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    margin-top: 2px;
+    text-transform: uppercase;
+  }
+  .presets button.active .label { color: rgba(13,14,15,0.6); }
+
+  /* Discipline cards */
+  .discipline {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent-color);
+    padding: 20px;
+    margin-bottom: 12px;
+  }
+  .discipline[data-d="swim"] { --accent-color: var(--swim); }
+  .discipline[data-d="bike"] { --accent-color: var(--bike); }
+  .discipline[data-d="run"]  { --accent-color: var(--run); }
+
+  .d-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .d-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    letter-spacing: 0.04em;
+  }
+  .d-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-color);
+    letter-spacing: 0.2em;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .field label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    transition: border-color 0.15s;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+  }
+  .field input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 4px;
+  }
+
+  /* Transitions */
+  .transitions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 12px 0 28px;
+  }
+  .transition {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    padding: 16px 20px;
+  }
+  .transition .d-header { margin-bottom: 10px; }
+  .transition .d-name { font-size: 18px; color: var(--dim); }
+
+  /* Result */
+  .result {
+    background: var(--ink);
+    color: var(--bg);
+    padding: 32px 24px;
+    margin-top: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .result::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 120px; height: 120px;
+    background: var(--accent);
+    transform: translate(40%, -40%) rotate(45deg);
+  }
+  .result-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--bg);
+    opacity: 0.6;
+    margin-bottom: 8px;
+  }
+  .total-time {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(56px, 14vw, 96px);
+    line-height: 0.9;
+    letter-spacing: 0.02em;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(13,14,15,0.15);
+  }
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0.5;
+  }
+  .stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    margin-top: 4px;
+  }
+
+  .breakdown {
+    margin-top: 28px;
+    border: 1px solid var(--line);
+  }
+  .breakdown-row {
+    display: grid;
+    grid-template-columns: 24px 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .breakdown-row:last-child { border-bottom: none; }
+  .dot {
+    width: 8px; height: 8px;
+    background: var(--c);
+    border-radius: 50%;
+  }
+  .b-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .b-pace {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--dim);
+  }
+  .b-time {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.04em;
+  }
+
+  @media (max-width: 480px) {
+    .row { grid-template-columns: 1fr; }
+    .presets { grid-template-columns: repeat(2, 1fr); }
+    .breakdown-row { grid-template-columns: 16px 1fr auto; }
+    .b-pace { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="header">
+    <div class="kicker">// Pace Calculator — v1</div>
+    <h1>Triathlon<br>Splits
+      <span class="sub">Nuoto · Bici · Corsa — calcolo tempo totale</span>
+    </h1>
+  </header>
+
+  <div class="mode">
+    <button id="modePreset" class="active" onclick="setMode('preset')">Distanze fisse</button>
+    <button id="modeCustom" onclick="setMode('custom')">Personalizzate</button>
+  </div>
+
+  <div id="presetBox" class="presets">
+    <button class="active" data-preset="sprint">Sprint<span class="label">0.75 / 20 / 5</span></button>
+    <button data-preset="olympic">Olimpico<span class="label">1.5 / 40 / 10</span></button>
+    <button data-preset="half">70.3<span class="label">1.9 / 90 / 21.1</span></button>
+    <button data-preset="full">Ironman<span class="label">3.8 / 180 / 42.2</span></button>
+  </div>
+
+  <!-- SWIM -->
+  <div class="discipline" data-d="swim">
+    <div class="d-header">
+      <div class="d-name">Nuoto</div>
+      <div class="d-num">01 / SWIM</div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Passo</label>
+        <input type="text" id="swimPace" value="1:45" inputmode="text">
+        <div class="hint">min:sec / 100m</div>
+      </div>
+      <div class="field">
+        <label>Distanza</label>
+        <input type="number" id="swimDist" value="0.75" step="0.05" min="0">
+        <div class="hint">km</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- T1 -->
+  <div class="transitions" style="grid-template-columns: 1fr; margin-bottom: 12px;">
+    <div class="transition">
+      <div class="d-header">
+        <div class="d-name">T1 — Transizione</div>
+        <div class="d-num" style="color: var(--dim)">SWIM → BIKE</div>
+      </div>
+      <div class="field">
+        <input type="text" id="t1" value="2:00" inputmode="text">
+        <div class="hint">min:sec</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BIKE -->
+  <div class="discipline" data-d="bike">
+    <div class="d-header">
+      <div class="d-name">Bici</div>
+      <div class="d-num">02 / BIKE</div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Velocità</label>
+        <input type="number" id="bikeSpeed" value="32" step="0.5" min="0">
+        <div class="hint">km/h</div>
+      </div>
+      <div class="field">
+        <label>Distanza</label>
+        <input type="number" id="bikeDist" value="20" step="1" min="0">
+        <div class="hint">km</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- T2 -->
+  <div class="transitions" style="grid-template-columns: 1fr; margin-bottom: 12px;">
+    <div class="transition">
+      <div class="d-header">
+        <div class="d-name">T2 — Transizione</div>
+        <div class="d-num" style="color: var(--dim)">BIKE → RUN</div>
+      </div>
+      <div class="field">
+        <input type="text" id="t2" value="1:30" inputmode="text">
+        <div class="hint">min:sec</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RUN -->
+  <div class="discipline" data-d="run">
+    <div class="d-header">
+      <div class="d-name">Corsa</div>
+      <div class="d-num">03 / RUN</div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Passo</label>
+        <input type="text" id="runPace" value="5:00" inputmode="text">
+        <div class="hint">min:sec / km</div>
+      </div>
+      <div class="field">
+        <label>Distanza</label>
+        <input type="number" id="runDist" value="5" step="0.1" min="0">
+        <div class="hint">km</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="result">
+    <div class="result-label">Tempo totale di gara</div>
+    <div class="total-time" id="totalTime">—</div>
+    <div class="stats">
+      <div>
+        <div class="stat-label">Distanza totale</div>
+        <div class="stat-value" id="totalDist">—</div>
+      </div>
+      <div>
+        <div class="stat-label">Velocità media</div>
+        <div class="stat-value" id="avgSpeed">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="breakdown" id="breakdown"></div>
+
+</div>
+
+<script>
+  const PRESETS = {
+    sprint:  { swim: 0.75, bike: 20,  run: 5 },
+    olympic: { swim: 1.5,  bike: 40,  run: 10 },
+    half:    { swim: 1.9,  bike: 90,  run: 21.1 },
+    full:    { swim: 3.8,  bike: 180, run: 42.2 }
+  };
+
+  let mode = 'preset';
+  let currentPreset = 'sprint';
+
+  // Parse "m:ss" or "mm:ss" or plain seconds/minutes -> total seconds
+  function parseTime(str) {
+    if (typeof str === 'number') return str;
+    str = String(str).trim();
+    if (!str) return 0;
+    if (str.includes(':')) {
+      const parts = str.split(':').map(s => parseFloat(s) || 0);
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    return parseFloat(str) * 60; // assume minutes if no colon
+  }
+
+  function formatHMS(totalSec) {
+    if (!isFinite(totalSec) || totalSec < 0) return '—';
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = Math.round(totalSec % 60);
+    const pad = n => String(n).padStart(2, '0');
+    if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+    return `${m}:${pad(s)}`;
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById('modePreset').classList.toggle('active', m === 'preset');
+    document.getElementById('modeCustom').classList.toggle('active', m === 'custom');
+    document.getElementById('presetBox').style.display = m === 'preset' ? 'grid' : 'none';
+
+    const distFields = ['swimDist', 'bikeDist', 'runDist'];
+    distFields.forEach(id => {
+      document.getElementById(id).disabled = (m === 'preset');
+    });
+
+    if (m === 'preset') applyPreset(currentPreset);
+    calc();
+  }
+
+  function applyPreset(name) {
+    currentPreset = name;
+    const p = PRESETS[name];
+    document.getElementById('swimDist').value = p.swim;
+    document.getElementById('bikeDist').value = p.bike;
+    document.getElementById('runDist').value  = p.run;
+    document.querySelectorAll('#presetBox button').forEach(b => {
+      b.classList.toggle('active', b.dataset.preset === name);
+    });
+  }
+
+  document.querySelectorAll('#presetBox button').forEach(b => {
+    b.addEventListener('click', () => { applyPreset(b.dataset.preset); calc(); });
+  });
+
+  function calc() {
+    // Swim: pace min:sec per 100m, dist in km -> seconds
+    const swimPaceSec = parseTime(document.getElementById('swimPace').value); // per 100m
+    const swimDist = parseFloat(document.getElementById('swimDist').value) || 0;
+    const swimSec = swimPaceSec * (swimDist * 1000 / 100);
+
+    // Bike: km/h + km
+    const bikeSpeed = parseFloat(document.getElementById('bikeSpeed').value) || 0;
+    const bikeDist = parseFloat(document.getElementById('bikeDist').value) || 0;
+    const bikeSec = bikeSpeed > 0 ? (bikeDist / bikeSpeed) * 3600 : 0;
+
+    // Run: pace min:sec per km
+    const runPaceSec = parseTime(document.getElementById('runPace').value);
+    const runDist = parseFloat(document.getElementById('runDist').value) || 0;
+    const runSec = runPaceSec * runDist;
+
+    const t1 = parseTime(document.getElementById('t1').value);
+    const t2 = parseTime(document.getElementById('t2').value);
+
+    const total = swimSec + t1 + bikeSec + t2 + runSec;
+    const totalDist = swimDist + bikeDist + runDist;
+    const avgSpeed = total > 0 ? (totalDist / (total / 3600)) : 0;
+
+    document.getElementById('totalTime').textContent = formatHMS(total);
+    document.getElementById('totalDist').textContent = totalDist.toFixed(2) + ' km';
+    document.getElementById('avgSpeed').textContent  = avgSpeed.toFixed(2) + ' km/h';
+
+    // Breakdown
+    const rows = [
+      { name: 'Nuoto', time: swimSec, pace: formatHMS(swimPaceSec) + '/100m', c: 'var(--swim)' },
+      { name: 'T1',    time: t1,      pace: '',                                c: 'var(--dim)' },
+      { name: 'Bici',  time: bikeSec, pace: bikeSpeed.toFixed(1) + ' km/h',    c: 'var(--bike)' },
+      { name: 'T2',    time: t2,      pace: '',                                c: 'var(--dim)' },
+      { name: 'Corsa', time: runSec,  pace: formatHMS(runPaceSec) + '/km',     c: 'var(--run)' }
+    ];
+    document.getElementById('breakdown').innerHTML = rows.map(r => `
+      <div class="breakdown-row" style="--c: ${r.c}">
+        <div class="dot"></div>
+        <div class="b-name">${r.name}</div>
+        <div class="b-pace">${r.pace}</div>
+        <div class="b-time">${formatHMS(r.time)}</div>
+      </div>
+    `).join('');
+  }
+
+  document.querySelectorAll('input').forEach(el => {
+    el.addEventListener('input', calc);
+  });
+
+  setMode('preset');
+</script>
+</body>
+</html>
