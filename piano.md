@@ -1,0 +1,155 @@
+# Piano di lavoro — Piano Fueling + UI Refresh
+
+> Documento operativo **per l'agente di sviluppo** (Claude Code). Fonte di verità: `SPECpianofueling.md`.
+> Regola d'oro: si implementa **solo quando l'utente lo chiede esplicitamente**. Fino ad allora questo file è la mappa; si spuntano le caselle man mano.
+
+- **Branch**: `feature/fueling-ui-refresh` (mai su `main`; merge su `main` solo a criteri di successo verificati).
+- **File unico**: `index.html` (HTML + CSS + JS vanilla, nessuna build).
+- **Deploy**: push → GitHub Pages (workflow esistente, nessuna modifica).
+
+---
+
+## 0. Registro decisioni (validate con l'utente — non ri-discutere)
+
+| # | Tema | Decisione |
+|---|---|---|
+| D1 | **Export PDF** | Si usa una **libreria via CDN** (es. `html2pdf.js` o `jsPDF`). Deroga consapevole al principio "zero dipendenze runtime": serve rete al primo load. Fallback `window.print()` non richiesto. |
+| D2 | **Durata non multipla della cadenza** | La **durata di frazione usata dal pianificatore viene arrotondata al multiplo di 5 minuti più vicino** (round-half-up). Esempi dell'utente: `5h03 → 5h00`, `4h07 → 4h10`. Su questa durata arrotondata si generano gli slot e si calcolano i totali orari; niente coda residua da gestire a parte. |
+| D3 | **Ambito sessione corrente** | Questa sessione: (a) crea il branch, (b) redige questo `piano.md`. L'implementazione parte **solo su richiesta esplicita dell'utente**, step per step. |
+| D4 | **Estetica** | Rivisitazione **leggera**, identità invariata: dark sport-editorial, Bebas Neue + JetBrains Mono, palette esistente (`--bg`, `--accent #d4ff4a`, `--bike #f4a261`, `--run #e63946`, ecc.). Niente redesign. |
+
+**Nota aperta (D2)**: definire il tie-break per il caso di parità esatta a 2.5 min (es. `x.5 → arrotonda per eccesso`). Decidere in fase di implementazione e documentare nel codice.
+
+---
+
+## 1. Vincoli invarianti (checklist di guardia — valgono per OGNI step)
+
+- [ ] Single file `index.html`; nessuna build; nessun backend/account/tracking/chiamata di rete (eccetto CDN libreria PDF e i font già presenti).
+- [ ] **Non toccare** markup né logica della sezione calcolo tempi esistente, se non per **leggere** le durate bici/corsa. Qualunque modifica necessaria a quella sezione → **chiedere prima**.
+- [ ] Persistenza **solo** tramite `StorageAdapter` (`get/set/list/delete`), dati JSON serializzabili, `schemaVersion` nel modello.
+- [ ] I tipi di vincolo di posizionamento restano **esattamente tre** (momento preciso / solo prima metà / solo seconda metà). Non estendere.
+- [ ] Nuoto escluso; T1/T2 ignorate.
+- [ ] Validare tutti gli input numerici.
+- [ ] Estetica coerente (D4).
+
+---
+
+## 2. Modello dati (riferimento per gli step)
+
+```
+schemaVersion: <int>
+Prodotto {
+  id, nome,
+  formato: 'gel' | 'barretta' | 'borraccia' | 'capsula',
+  carbo_g, sodio_mg, caffeina_mg, volume_ml, quantita,
+  componenti?: [ {nome, carbo_g, sodio_mg, caffeina_mg, volume_ml} ]   // SOLO borraccia
+}
+InventarioBici: Prodotto[]      // liste separate
+InventarioCorsa: Prodotto[]
+VincoloProdotto (per frazione, opzionale) {
+  tipo: 'momento' | 'prima_meta' | 'seconda_meta',
+  minuto?: <int>                // solo se tipo='momento'
+}
+FrazioneConfig { durataMin (editabile, arrotondata D2), cadenzaMin, targetCarbo_gh, targetSodio_mgh, targetLiquidi_mlh, offsetPrimoSlotMin? }
+RigheManuali { colazione, preGara, minuto0 }  // fuori allocatore, fuori rate orari
+Piano { ...snapshot risultato per diff su ricalcolo }
+```
+
+- **Frazionabilità**: gel = intero; barretta = intera o metà; capsula = intera (o sciolta in borraccia come componente); borraccia = a sorsi (l'app calcola la suddivisione in sorsi sugli slot).
+- **Borraccia**: mini-form "aggiungi componente"; i totali borraccia = somma componenti.
+
+---
+
+## 3. Step di implementazione (ordinati, ognuno con accettazione + verifica)
+
+> Ogni step è piccolo e chiudibile da solo. Committare a fine step. Aprire il file nel browser per verificare (nessuna build).
+
+### Step 1 — StorageAdapter + versioning
+- [ ] Implementare `StorageAdapter` con `get/set/list/delete` su `localStorage`, JSON serializzabile, chiavi namespaced (es. `fueling:*`).
+- [ ] Aggiungere `schemaVersion` e uno stub di migrazione (funzione `migrate(data)` no-op iniziale).
+- **Accettazione**: salvando e ricaricando la pagina i dati persistono; l'interfaccia non conosce `localStorage` direttamente (solo via adapter).
+- **Verifica**: DevTools → Application → localStorage mostra le chiavi; reload mantiene lo stato.
+
+### Step 2 — Sezione Fueling: scaffold + lettura durate
+- [ ] Nuova sezione "Piano Fueling" sotto il calcolatore esistente (non alterare quello esistente).
+- [ ] Campi durata bici/corsa **pre-popolati** leggendo il risultato del calcolatore, ma **editabili** manualmente.
+- **Accettazione**: cambiando i tempi nel calcolatore, le durate fueling si aggiornano finché l'utente non le sovrascrive.
+- **Verifica**: criterio di successo spec §1.
+
+### Step 3 — CRUD prodotti + inventari separati
+- [ ] Form prodotto (campi modello §2); lista prodotti; inventari **bici** e **corsa** distinti.
+- [ ] Formato "borraccia": mini-form componenti; totali borraccia = somma componenti.
+- **Accettazione**: borraccia con 3 componenti mostra totali = somma (spec §criterio 4).
+- **Verifica**: creare prodotti di ogni formato; persistono via adapter.
+
+### Step 4 — Config frazione: cadenza, target, offset corsa, arrotondamento D2
+- [ ] Cadenza indipendente bici/corsa; target g/h, mg/h, ml/h indipendenti per frazione; niente target caffeina.
+- [ ] Bici: primo slot al primo tick di cadenza. Corsa: primo slot al **minuto personalizzato** (offset), poi cadenza.
+- [ ] Applicare arrotondamento durata D2 (multiplo di 5 min) alla durata usata per generare slot/totali.
+- **Accettazione**: slot bici partono al primo tick; slot corsa partono all'offset; durata arrotondata correttamente (test 5h03→5h00, 4h07→4h10).
+- **Verifica**: spec §criterio 2.
+
+### Step 5 — Righe manuali (colazione, pre-gara, minuto 0)
+- [ ] Tre righe con prodotto e orario a scelta; **fuori** dall'allocatore e **fuori** dai rate orari.
+- **Accettazione**: compaiono in tabella e nei totali lista prodotti, ma non spostano i g/h calcolati.
+- **Verifica**: spec §criterio 3.
+
+### Step 6 — Vincoli di posizionamento (3 tipi)
+- [ ] Per prodotto/frazione: momento preciso (min X / metà / fine), solo prima metà, solo seconda metà.
+- **Accettazione**: vincolo "metà bici" colloca il prodotto nello slot più vicino alla metà frazione.
+- **Verifica**: spec §criterio 7.
+
+### Step 7 — Allocatore greedy (Opzione A)
+- [ ] Ordine: (1) momenti precisi → (2) borracce a sorsi come base distribuita (rispettando prima/seconda metà) → (3) gap carbo con gel + mezze barrette → (4) gap sodio con capsule.
+- [ ] Rispettare sempre quantità disponibili e vincoli; **mai inventare prodotti** non in inventario.
+- [ ] Priorità: totale di frazione torna; per slot minimizzare scarto e **mostrare il delta** (es. "87 g/h, −3").
+- [ ] Deficit se inventario insufficiente: evidenziato a colore ("manca 1 gel, −25 g carbo").
+- **Accettazione**: con inventario sufficiente il totale carbo/sodio/liquidi coincide col target (±1 unità minima); con inventario insufficiente deficit a colore, nessun prodotto inventato.
+- **Verifica**: spec §criteri 5 e 6.
+
+### Step 8 — Ricalcolo durata (diff)
+- [ ] Se la durata cambia (es. +30 min): mantenere **stessi rate orari e stesso mix**; allungare/accorciare tabella; aggiungere/togliere unità dai prodotti dell'inventario.
+- [ ] Nella lista prodotti finale: differenze vs piano iniziale evidenziate a colore (aggiunti/rimossi). Deficit come sopra se non bastano.
+- **Accettazione**: +30 min estende la tabella e colora le unità aggiunte/rimosse.
+- **Verifica**: spec §criterio 8.
+
+### Step 9 — Output: tabelle e riepilogo
+- [ ] Tabella per slot (righe = tick cadenza + righe manuali), divisa per frazione.
+- [ ] Riepilogo orario (per ora: carbo/sodio/liquidi/caffeina vs target).
+- [ ] Lista prodotti utilizzati in fondo (quantità + diff colorato dopo ricalcolo).
+- **Accettazione**: le tre viste rendono coerentemente; caffeina mostrata come totale mg (nessun target).
+- **Verifica**: spec §Output.
+
+### Step 10 — Export PDF (D1)
+- [ ] Integrare libreria PDF via CDN; export di tabella + riepilogo + lista, generazione client.
+- **Accettazione**: l'export produce un PDF leggibile con le tre parti.
+- **Verifica**: spec §criterio 9. (Confermare libreria scelta prima di aggiungerla.)
+
+### Step 11 — UI refresh leggero
+- [ ] Audit read-only preliminare (skill `improve-ui`), poi pass con `baseline-ui` (spacing/gerarchia/tipografia), `frontend-design`, `fixing-accessibility`.
+- [ ] Integrare visivamente la sezione fueling con l'esistente; identità invariata (D4).
+- **Accettazione**: facciata più pulita, nessuna regressione d'identità, accessibilità migliorata (label, focus, contrasto).
+- **Verifica**: confronto prima/dopo; nessun cambiamento alla logica calcolo tempi.
+
+### Step 12 — Verifica finale criteri di successo
+- [ ] Ripercorrere tutti i checkbox "Criteri di successo (testabili)" della spec e spuntarli.
+- [ ] Test persistenza: reload mantiene prodotti, inventari, ultimo piano.
+- **Accettazione**: tutti i criteri spec verdi.
+- **Verifica**: solo allora proporre merge su `main`.
+
+---
+
+## 4. Mappa criteri di successo spec → step
+
+| Criterio spec | Step |
+|---|---|
+| Durate popolate ed editabili | 2 |
+| Cadenze/target indipendenti; primo slot bici/corsa | 4 |
+| Righe manuali fuori dai rate | 5 |
+| Borraccia = somma componenti | 3 |
+| Totale frazione = target ±1; delta per slot | 7 |
+| Deficit a colore, nessun prodotto inventato | 7 |
+| Vincolo "metà bici" → slot più vicino | 6 |
+| +30 min estende tabella + diff colorato | 8 |
+| PDF leggibile con 3 parti | 10 |
+| Reload mantiene stato | 1, 12 |
