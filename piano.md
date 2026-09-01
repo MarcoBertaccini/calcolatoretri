@@ -121,12 +121,14 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Verifica**: test jsdom 11/11 — base 3 gel @60′; +60′→6 gel (+3, increased); −a 40′→2 gel (−1, decreased); prodotto reso indisponibile→removed vs base; prodotto nuovo usato→added; rendering con classi colore; persistenza baseline dopo reload. Screenshot: Gel ×6 (+3) e Salt caps (+2) in verde.
 - **API esposte**: `Fueling.planDiff()`, `Fueling.setPlanBaseline()`, hook `Fueling.afterPlan`.
 
-### Step 9 — Output: tabelle e riepilogo
-- [ ] Tabella per slot (righe = tick cadenza + righe manuali), divisa per frazione.
-- [ ] Riepilogo orario (per ora: carbo/sodio/liquidi/caffeina vs target).
-- [ ] Lista prodotti utilizzati in fondo (quantità + diff colorato dopo ricalcolo).
-- **Accettazione**: le tre viste rendono coerentemente; caffeina mostrata come totale mg (nessun target).
-- **Verifica**: spec §Output.
+### Step 9 — Output: tabelle e riepilogo ✅
+- [x] Card "Report piano": **tabella per slot** per frazione (righe = tick cadenza; le 3 righe manuali in testa alla tabella bici, taggate "manuale", con Δ = —), prodotti per slot e Δ carbo/liquidi.
+- [x] **Riepilogo orario** per frazione: bucket da 60′ (il tick a fine ora appartiene all'ora che chiude), carbo/sodio/liquidi actual/target con sotto-target in rosso, caffeina come totale (nessun target).
+- [x] **Lista prodotti finale**: uso allocatore per frazione (con diff colorato vs piano base) + righe manuali + **totale complessivo incl. manuali**.
+- **Accettazione**: le tre viste rendono coerentemente; caffeina come totale mg. ✅
+- **Verifica**: test jsdom 14/14 — 3 sezioni presenti; righe manuali in tabella; 2 bucket orari a 120′ con target /90; totale complessivo carbo 285 (180 piano + 105 manuali); coerenza totale di frazione 180; placeholder pre-calcolo; hook Step 8 ancora attivo (catena non sostituita). Regressione completa step 3–9: 106/106. Screenshot report.
+- **Miglioria allocatore (Step 7)**: tie-break sugli slot ora sceglie il più lontano dagli slot già potenziati (`boosted`) → distribuzione più uniforme nel tempo (spec §"distribuzione uniforme"), meno clustering iniziale. La parità perfetta per-ora non è garantita con unità discrete (non richiesta): conta il totale di frazione + delta per slot. test7 invariato 20/20.
+- **API esposte**: `Fueling.renderReport(plan)`.
 
 ### Step 10 — Export PDF (D1)
 - [ ] Integrare libreria PDF via CDN; export di tabella + riepilogo + lista, generazione client.

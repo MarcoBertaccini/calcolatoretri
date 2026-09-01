@@ -467,6 +467,72 @@
   .usage-row.removed .usage-name { color: var(--dim); text-decoration: line-through; }
   .usage-empty { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
 
+  /* Report */
+  .report-section { margin-bottom: 28px; }
+  .report-h {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.04em;
+    margin: 0 0 4px;
+  }
+  .report-h .rh-dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    margin-right: 8px; vertical-align: middle;
+  }
+  .report-h[data-d="bike"] .rh-dot { background: var(--bike); }
+  .report-h[data-d="run"] .rh-dot { background: var(--run); }
+  .report-sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim);
+    letter-spacing: 0.08em; margin-bottom: 12px;
+  }
+  .report-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--dim); margin: 14px 0 8px;
+  }
+  .rt-wrap { overflow-x: auto; border: 1px solid var(--line); }
+  table.rt {
+    width: 100%; border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    min-width: 520px;
+  }
+  table.rt th, table.rt td {
+    text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  table.rt th {
+    font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--dim); font-weight: 400; background: var(--bg);
+  }
+  table.rt td.rt-time, table.rt th.rt-time { text-align: left; color: var(--dim); }
+  table.rt td.rt-prod, table.rt th.rt-prod { text-align: left; white-space: normal; color: var(--ink); }
+  table.rt tr:last-child td { border-bottom: none; }
+  table.rt tr.rt-manual td { background: rgba(212,255,74,0.04); }
+  .rt-tag {
+    font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid var(--accent); padding: 1px 5px; margin-left: 6px;
+  }
+  .rt-delta-pos { color: var(--accent); }
+  .rt-delta-neg { color: var(--run); }
+  .rt-delta-zero { color: var(--dim); }
+
+  .hourly-row {
+    display: grid;
+    grid-template-columns: 96px repeat(4, 1fr);
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 8px 0; border-bottom: 1px solid var(--line); align-items: baseline;
+  }
+  .hourly-row.head { color: var(--dim); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .hourly-row .hk { color: var(--dim); }
+  .hourly-bad { color: var(--run); }
+
+  .report-total {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px;
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    margin-top: 12px; padding-top: 12px; border-top: 2px solid var(--accent);
+  }
+  .report-total .rt-total-k { color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; }
+
   /* Righe manuali */
   .man-item {
     background: var(--bg);
@@ -989,7 +1055,16 @@
       <div id="planUsage" class="plan-usage"></div>
       <div class="fuel-note" id="baselineNote"></div>
 
-      <div class="fuel-note">Allocatore greedy: colloca prima i vincoli «momento preciso», usa le borracce a sorsi come base distribuita sugli slot, chiude il gap carboidrati con gel e mezze barrette, poi il gap sodio con le capsule. Rispetta quantità e vincoli; non inventa prodotti. Cambiando la durata i rate orari e il mix restano gli stessi: la tabella si allunga/accorcia e la lista evidenzia le unità <span class="plan-ok">aggiunte</span> / <span class="plan-bad">rimosse</span> rispetto al piano base. La tabella per slot completa arriva allo Step 9.</div>
+      <div class="fuel-note">Allocatore greedy: colloca prima i vincoli «momento preciso», usa le borracce a sorsi come base distribuita sugli slot, chiude il gap carboidrati con gel e mezze barrette, poi il gap sodio con le capsule. Rispetta quantità e vincoli; non inventa prodotti. Cambiando la durata i rate orari e il mix restano gli stessi: la tabella si allunga/accorcia e la lista evidenzia le unità <span class="plan-ok">aggiunte</span> / <span class="plan-bad">rimosse</span> rispetto al piano base. Il report completo (tabella per slot + riepilogo orario + lista) è qui sotto.</div>
+    </div>
+
+    <!-- ===== REPORT (tabella per slot + riepilogo orario + lista) ===== -->
+    <div class="discipline" id="reportCard">
+      <div class="d-header">
+        <div class="d-name">Report piano</div>
+        <div class="d-num">FUELING / OUT</div>
+      </div>
+      <div id="reportBody" class="report-body"><div class="usage-empty">Premi «Calcola piano» per generare il report.</div></div>
     </div>
   </section>
 
@@ -1904,6 +1979,7 @@
       function fillGap(totKey, prodKey, formats, fractionTgt) {
         if (fractionTgt <= 0 || nS === 0) return;
         const perSlot = fractionTgt / nS;
+        const boosted = []; // slot già riempiti con unità discrete in questa passata
         let guard = 0;
         while (guard++ < 10000) {
           const gap = fractionTgt - placed(totKey);
@@ -1923,12 +1999,23 @@
           let move = null;
           for (let k = cands.length - 1; k >= 0; k--) { if (cands[k].val <= gap + 1e-9) { move = cands[k]; break; } }
           if (!move) { const sm = cands[0]; if (sm.val < 2 * gap - 1e-9) move = sm; else break; }
-          // slot ammesso col deficit maggiore per questo nutriente
-          let bi = -1, bd = -Infinity;
-          move.allowed.forEach(s => { const i = idxOf[s]; if (i == null) return; const d = perSlot - cells[i].totals[totKey]; if (d > bd) { bd = d; bi = i; } });
+          // slot ammesso col deficit maggiore; a parità, il più lontano dagli
+          // slot già usati (spread) per distribuire uniformemente nel tempo.
+          const eps = 1e-6;
+          let maxDef = -Infinity;
+          move.allowed.forEach(s => { const i = idxOf[s]; if (i == null) return; const d = perSlot - cells[i].totals[totKey]; if (d > maxDef) maxDef = d; });
+          let bi = -1, bestSpread = -Infinity, bestSlot = null;
+          move.allowed.forEach(s => {
+            const i = idxOf[s]; if (i == null) return;
+            const d = perSlot - cells[i].totals[totKey];
+            if (d < maxDef - eps) return; // solo slot col deficit (quasi) massimo
+            const spread = boosted.length ? Math.min.apply(null, boosted.map(f => Math.abs(f - s))) : s;
+            if (spread > bestSpread) { bestSpread = spread; bi = i; bestSlot = s; }
+          });
           if (bi < 0) break;
           addToSlot(slots[bi], move.p, move.size);
           move.p.rem -= move.size;
+          if (boosted.indexOf(bestSlot) < 0) boosted.push(bestSlot);
         }
       }
 
@@ -2145,6 +2232,167 @@
     // Esposto per test.
     F.planDiff = planDiff;
     F.setPlanBaseline = setBaseline;
+  })();
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 9: report (tabella per slot + riepilogo orario +
+     lista prodotti finale). Le righe manuali compaiono nella tabella bici e
+     nei totali della lista finale, ma non nei rate orari.
+     ========================================================================= */
+  (function () {
+    const F = window.Fueling;
+    const $ = id => document.getElementById(id);
+    const fmt = n => (Math.round(n * 10) / 10).toString();
+    const KIND_LABEL = { bike: 'Bici', run: 'Corsa' };
+    const FORMATO_LABEL = { gel: 'Gel', barretta: 'Barretta', borraccia: 'Borraccia', capsula: 'Capsula' };
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function deltaCell(v) {
+      const cls = v > 0.05 ? 'rt-delta-pos' : (v < -0.05 ? 'rt-delta-neg' : 'rt-delta-zero');
+      const txt = (v >= 0 ? '+' : '') + fmt(v);
+      return '<span class="' + cls + '">' + txt + '</span>';
+    }
+
+    /* ---- Tabella per slot ---- */
+    function fracTable(pl, kind) {
+      const manual = kind === 'bike' ? F.manualRows() : [];
+      let body = '';
+      manual.forEach(m => {
+        body += '<tr class="rt-manual">' +
+          '<td class="rt-time">' + esc(m.orario || '—') + '</td>' +
+          '<td class="rt-prod">' + esc(m.nome || m.label) + '<span class="rt-tag">manuale · ' + esc(m.label) + '</span></td>' +
+          '<td>' + fmt(m.carbo_g) + '</td><td>' + fmt(m.sodio_mg) + '</td>' +
+          '<td>' + fmt(m.caffeina_mg) + '</td><td>' + fmt(m.volume_ml) + '</td>' +
+          '<td class="rt-delta-zero">—</td></tr>';
+      });
+      if (pl.cells.length === 0 && manual.length === 0) {
+        return '<div class="usage-empty">Nessuno slot (controlla durata e cadenza).</div>';
+      }
+      pl.cells.forEach(c => {
+        const prods = c.items.length
+          ? c.items.map(it => esc(it.nome) + ' ×' + fmt(it.units)).join(', ')
+          : '<span style="opacity:.5">—</span>';
+        body += '<tr>' +
+          '<td class="rt-time">' + c.slot + '′</td>' +
+          '<td class="rt-prod">' + prods + '</td>' +
+          '<td>' + fmt(c.totals.carbo) + ' <span style="opacity:.6;font-size:10px">' + deltaCell(c.delta.carbo) + '</span></td>' +
+          '<td>' + fmt(c.totals.sodio) + '</td>' +
+          '<td>' + fmt(c.totals.caff) + '</td>' +
+          '<td>' + fmt(c.totals.volume) + '</td>' +
+          '<td>' + deltaCell(c.delta.liquidi) + '</td></tr>';
+      });
+      return '<div class="rt-wrap"><table class="rt"><thead><tr>' +
+        '<th class="rt-time">Tempo</th><th class="rt-prod">Prodotti</th>' +
+        '<th>Carbo g (Δ)</th><th>Sodio mg</th><th>Caff mg</th><th>Vol ml</th><th>Δ liq</th>' +
+        '</tr></thead><tbody>' + body + '</tbody></table></div>';
+    }
+
+    /* ---- Riepilogo orario ---- */
+    function fracHourly(pl, kind) {
+      const cfg = F.getConfig()[kind];
+      const total = pl.roundedMin;
+      const nB = Math.max(1, Math.ceil(total / 60));
+      const buckets = [];
+      for (let i = 0; i < nB; i++) {
+        const start = i * 60, end = Math.min((i + 1) * 60, total);
+        buckets.push({ start, end, mins: end - start, carbo: 0, sodio: 0, caff: 0, volume: 0 });
+      }
+      pl.cells.forEach(c => {
+        // il tick a fine ora (es. 60′) appartiene all'ora che chiude, non alla successiva
+        const i = Math.min(nB - 1, Math.max(0, Math.ceil(c.slot / 60) - 1));
+        const b = buckets[i];
+        b.carbo += c.totals.carbo; b.sodio += c.totals.sodio; b.caff += c.totals.caff; b.volume += c.totals.volume;
+      });
+      let rows = '<div class="hourly-row head"><span>Ora</span><span>Carbo</span><span>Sodio</span><span>Liquidi</span><span>Caff</span></div>';
+      buckets.forEach((b, i) => {
+        const tC = cfg.carbo_gh * b.mins / 60, tS = cfg.sodio_mgh * b.mins / 60, tL = cfg.liquidi_mlh * b.mins / 60;
+        const cell = (act, tgt) => {
+          const bad = act < tgt - 0.5 ? ' hourly-bad' : '';
+          return '<span class="' + bad.trim() + '">' + fmt(act) + '/' + fmt(tgt) + '</span>';
+        };
+        rows += '<div class="hourly-row">' +
+          '<span class="hk">Ora ' + (i + 1) + ' <span style="opacity:.6">' + b.start + '–' + b.end + '′</span></span>' +
+          cell(b.carbo, tC) + cell(b.sodio, tS) + cell(b.volume, tL) +
+          '<span>' + fmt(b.caff) + '</span></div>';
+      });
+      return rows;
+    }
+
+    function fractionReport(pl, kind) {
+      return '<div class="report-section">' +
+        '<div class="report-h" data-d="' + kind + '"><span class="rh-dot"></span>' + KIND_LABEL[kind] + '</div>' +
+        '<div class="report-sub">durata ' + pl.roundedMin + ' min · ' + pl.nSlots + ' slot</div>' +
+        '<div class="report-label">Tabella per slot</div>' + fracTable(pl, kind) +
+        '<div class="report-label">Riepilogo orario (vs target)</div>' + fracHourly(pl, kind) +
+        '</div>';
+    }
+
+    /* ---- Lista prodotti finale (usage + diff + manuali + totali) ---- */
+    function finalList() {
+      const d = F.planDiff();
+      const badge = r => {
+        if (r.state === 'added') return '<span class="plan-ok">+' + fmt(r.delta) + ' nuovo</span>';
+        if (r.state === 'removed') return '<span class="plan-bad">−' + fmt(r.baseUnits) + ' rimosso</span>';
+        if (r.state === 'increased') return '<span class="plan-ok">+' + fmt(r.delta) + '</span>';
+        if (r.state === 'decreased') return '<span class="plan-bad">' + fmt(r.delta) + '</span>';
+        return '<span style="opacity:.4">=</span>';
+      };
+      const fracRows = (rows) => {
+        const vis = rows.filter(r => r.units > 0 || r.state === 'removed');
+        if (!vis.length) return '<div class="usage-empty">Nessun prodotto.</div>';
+        return vis.map(r =>
+          '<div class="usage-row ' + (r.state === 'removed' ? 'removed' : '') + '">' +
+          '<span class="usage-name">' + esc(r.nome) + '<span class="u-tag">' + (FORMATO_LABEL[r.formato] || r.formato) + '</span></span>' +
+          '<span class="usage-qty">×' + fmt(r.units) + '</span>' +
+          '<span class="usage-diff">' + badge(r) + '</span></div>'
+        ).join('');
+      };
+      const manual = F.manualRows();
+      const manRows = manual.length
+        ? manual.map(m =>
+            '<div class="usage-row"><span class="usage-name">' + esc(m.nome || m.label) +
+            '<span class="u-tag">manuale · ' + esc(m.label) + '</span></span>' +
+            '<span class="usage-qty">' + esc(m.orario || '') + '</span>' +
+            '<span class="usage-diff" style="opacity:.5">—</span></div>').join('')
+        : '<div class="usage-empty">Nessuna riga manuale.</div>';
+
+      const mt = F.manualTotals();
+      const grand = {
+        carbo: d.plan.bike.totals.carbo + d.plan.run.totals.carbo + mt.carbo_g,
+        sodio: d.plan.bike.totals.sodio + d.plan.run.totals.sodio + mt.sodio_mg,
+        caff: d.plan.bike.totals.caff + d.plan.run.totals.caff + mt.caffeina_mg,
+        volume: d.plan.bike.totals.volume + d.plan.run.totals.volume + mt.volume_ml
+      };
+
+      return '<div class="report-section">' +
+        '<div class="report-h">Lista prodotti finale</div>' +
+        '<div class="report-sub">allocatore + righe manuali · diff vs piano base</div>' +
+        '<div class="usage-frac"><div class="usage-frac-head">Bici</div>' + fracRows(d.bike) + '</div>' +
+        '<div class="usage-frac"><div class="usage-frac-head">Corsa</div>' + fracRows(d.run) + '</div>' +
+        '<div class="usage-frac"><div class="usage-frac-head">Righe manuali</div>' + manRows + '</div>' +
+        '<div class="report-total"><span class="rt-total-k">Totale complessivo (incl. manuali)</span>' +
+        '<span>' + fmt(grand.carbo) + ' g carbo · ' + fmt(grand.sodio) + ' mg sodio · ' +
+        fmt(grand.caff) + ' mg caffeina · ' + fmt(grand.volume) + ' ml</span></div>' +
+        '</div>';
+    }
+
+    function renderOutput(plan) {
+      $('reportBody').innerHTML =
+        fractionReport(plan.bike, 'bike') +
+        fractionReport(plan.run, 'run') +
+        finalList();
+    }
+
+    // Concatena all'hook esistente (Step 8) senza sostituirlo.
+    const prev = F.afterPlan;
+    F.afterPlan = function (plan) {
+      if (typeof prev === 'function') prev(plan);
+      renderOutput(plan);
+    };
+
+    F.renderReport = renderOutput;
   })();
 </script>
 </body>
