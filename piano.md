@@ -167,6 +167,33 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 
 ---
 
+## Step 13 — Bilanciamento orario dell'allocatore (post-review) ⏳ DA IMPLEMENTARE
+> Origine: review utente — i conti orari (screenshot) oscillavano molto (es. sodio 692 vs 342, carbo 118 vs 78, liquidi 460 vs 400). Causa: l'allocatore bilancia solo il totale di frazione + lo scarto per-slot, senza vincolo per-ora; inoltre cadenza che non divide 60 → ore con numero di slot diverso; e la coda arrotondata crea un bucket orario senza slot ("Ora 6 300–310′ 0/15"). **Decisione utente: bilanciamento per ora.**
+
+**Disegno:**
+- Partizionare gli slot in **bucket orari** (stesso schema del report: `min(nB-1, max(0, ceil(slot/60)-1))`). **Merge coda**: se l'ultimo bucket ha 0 slot (o < ~pochi minuti senza slot), fonderlo nell'ora precedente — niente più righe "0/target" fantasma.
+- Per ogni ora calcolare i **target orari proporzionali** ai minuti del bucket: `rate_gh * mins/60` per carbo/sodio/liquidi.
+- **Borracce (liquidi + carbo/sodio da mix) distribuite PER ORA**: la quota di contenuto assegnata a ciascuna ora è ∝ ai minuti dell'ora (poi spalmata sugli slot di quell'ora). Così i liquidi risultano piatti anche se la cadenza non divide 60. (Oggi invece: uguale per slot → sbilanciato quando gli slot/ora variano.)
+- **Momenti precisi**: restano piazzati prima (nel loro slot); il loro contributo si scala dal gap dell'ora che li contiene.
+- **Gap-fill discreto (gel/mezze barrette → carbo; capsule → sodio) PER ORA**: per ogni ora, chiudere il gap residuo di quell'ora usando le unità disponibili, collocandole negli slot di quell'ora (spread interno). Le quantità disponibili sono **globali** (decremento condiviso tra le ore); i vincoli prima/seconda metà limitano le ore ammesse (un prodotto è usabile solo nelle ore i cui slot rientrano nei suoi `allowedSlots`).
+- Ordine ore: sequenziale 1→N (oppure per gap decrescente). Fraction total resta ≈ target (somma dei target orari).
+
+**Invarianti da preservare (regressione):** totale di frazione ancora = target ±1 unità; quantità e vincoli rispettati; **nessun prodotto inventato**; righe manuali ancora fuori dai rate; deficit ancora mostrato a colore quando l'inventario non basta.
+
+**Accettazione:**
+- [ ] Con inventario adeguato, ogni **ora piena** mostra carbo/sodio/liquidi entro **±1 unità minima** dal target (es. capsule 250 + target 500 → ~500 ogni ora; niente più 692/342).
+- [ ] Nessun bucket orario "fantasma" per la coda arrotondata (merge nell'ora precedente).
+- [ ] Totale di frazione invariato; vincoli/quantità/manuali/deficit invariati nel comportamento.
+
+**Verifica:**
+- [ ] Nuovo test jsdom `test13`: scenario multi-ora con cadenza che **divide** 60 (es. 20) e una che **non** divide (es. 25) → assert che ogni ora piena sta entro ±1 unità dai target di carbo/sodio/liquidi; assert merge coda (nessun bucket 0-slot); assert totale di frazione = target.
+- [ ] Regressione completa (test3–12) ancora verde; ri-verifica criterio 5 (totali) e 6 (deficit).
+- [ ] Screenshot del riepilogo orario prima/dopo.
+
+**Nota:** un residuo di ±1 unità/ora è inevitabile con prodotti discreti (non si spezza una capsula); l'obiettivo è portarsi a quel minimo, non azzerare.
+
+---
+
 ## 4. Mappa criteri di successo spec → step
 
 | Criterio spec | Step |
