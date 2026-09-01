@@ -374,6 +374,34 @@
   }
   .cfg-preview b { color: var(--accent); font-weight: 600; }
 
+  /* Righe manuali */
+  .man-item {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--dim);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .man-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.04em;
+    margin-bottom: 12px;
+  }
+  .man-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-left: 8px;
+  }
+  .man-fields {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+  }
+
   /* Inventario */
   .inv-mode { margin: 4px 0 20px; }
   .field select {
@@ -498,6 +526,8 @@
   @media (max-width: 480px) {
     .comp-labels { display: none; }
     .comp-row { grid-template-columns: 1fr 1fr 28px; }
+    .cfg-grid { grid-template-columns: 1fr; }
+    .man-fields { grid-template-columns: 1fr 1fr; }
     .row { grid-template-columns: 1fr; }
     .presets { grid-template-columns: repeat(2, 1fr); }
     .breakdown-row { grid-template-columns: 16px 1fr auto; }
@@ -758,6 +788,53 @@
       </form>
 
       <div class="prod-list" id="prodList"></div>
+    </div>
+
+    <!-- ===== RIGHE MANUALI (fuori allocatore / fuori rate orari) ===== -->
+    <div class="discipline" id="manCard">
+      <div class="d-header">
+        <div class="d-name">Righe manuali</div>
+        <div class="d-num">FUELING / MAN</div>
+      </div>
+
+      <div class="man-item">
+        <div class="man-label">Colazione</div>
+        <div class="man-fields">
+          <div class="field"><label for="man_col_orario">Orario</label><input type="text" id="man_col_orario" value="-2:30" maxlength="12"></div>
+          <div class="field"><label for="man_col_nome">Prodotto</label><input type="text" id="man_col_nome" maxlength="60"></div>
+          <div class="field"><label for="man_col_carbo">Carbo (g)</label><input type="number" id="man_col_carbo" min="0" step="0.1" value="0"></div>
+          <div class="field"><label for="man_col_sodio">Sodio (mg)</label><input type="number" id="man_col_sodio" min="0" step="1" value="0"></div>
+          <div class="field"><label for="man_col_caff">Caffeina (mg)</label><input type="number" id="man_col_caff" min="0" step="1" value="0"></div>
+          <div class="field"><label for="man_col_vol">Volume (ml)</label><input type="number" id="man_col_vol" min="0" step="1" value="0"></div>
+        </div>
+      </div>
+
+      <div class="man-item">
+        <div class="man-label">Pre-gara</div>
+        <div class="man-fields">
+          <div class="field"><label for="man_pre_orario">Orario</label><input type="text" id="man_pre_orario" value="-0:15" maxlength="12"></div>
+          <div class="field"><label for="man_pre_nome">Prodotto</label><input type="text" id="man_pre_nome" maxlength="60"></div>
+          <div class="field"><label for="man_pre_carbo">Carbo (g)</label><input type="number" id="man_pre_carbo" min="0" step="0.1" value="0"></div>
+          <div class="field"><label for="man_pre_sodio">Sodio (mg)</label><input type="number" id="man_pre_sodio" min="0" step="1" value="0"></div>
+          <div class="field"><label for="man_pre_caff">Caffeina (mg)</label><input type="number" id="man_pre_caff" min="0" step="1" value="0"></div>
+          <div class="field"><label for="man_pre_vol">Volume (ml)</label><input type="number" id="man_pre_vol" min="0" step="1" value="0"></div>
+        </div>
+      </div>
+
+      <div class="man-item">
+        <div class="man-label">Minuto 0 <span class="man-sub">partenza bici</span></div>
+        <div class="man-fields">
+          <div class="field"><label for="man_m0_orario">Orario</label><input type="text" id="man_m0_orario" value="0" maxlength="12"></div>
+          <div class="field"><label for="man_m0_nome">Prodotto</label><input type="text" id="man_m0_nome" maxlength="60"></div>
+          <div class="field"><label for="man_m0_carbo">Carbo (g)</label><input type="number" id="man_m0_carbo" min="0" step="0.1" value="0"></div>
+          <div class="field"><label for="man_m0_sodio">Sodio (mg)</label><input type="number" id="man_m0_sodio" min="0" step="1" value="0"></div>
+          <div class="field"><label for="man_m0_caff">Caffeina (mg)</label><input type="number" id="man_m0_caff" min="0" step="1" value="0"></div>
+          <div class="field"><label for="man_m0_vol">Volume (ml)</label><input type="number" id="man_m0_vol" min="0" step="1" value="0"></div>
+        </div>
+      </div>
+
+      <div class="cfg-preview" id="manTotals"></div>
+      <div class="fuel-note">Prodotto e orario a scelta. Queste righe <b>non entrano nell'allocatore</b> e <b>non contano nei rate orari</b>: compaiono solo nella tabella e nei totali della lista prodotti. Una riga conta se ha un prodotto o un valore &gt; 0.</div>
     </div>
   </section>
 
@@ -1403,6 +1480,97 @@
 
     persistConfig();
     refreshAll();
+  })();
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 5: righe manuali (colazione, pre-gara, minuto 0).
+     Prodotto e orario a scelta. NON entrano nell'allocatore e NON contano nei
+     rate orari: appariranno solo in tabella e nei totali della lista prodotti.
+     ========================================================================= */
+  (function () {
+    const $ = id => document.getElementById(id);
+    const val = id => ($(id) ? $(id).value : '');
+    const nn = id => { const n = parseFloat(val(id)); return isFinite(n) && n > 0 ? n : 0; };
+    const fmt = n => (Math.round(n * 10) / 10).toString();
+
+    const ROWS = [
+      { key: 'col', label: 'Colazione' },
+      { key: 'pre', label: 'Pre-gara' },
+      { key: 'm0', label: 'Minuto 0' }
+    ];
+
+    function readManual() {
+      const o = {};
+      ROWS.forEach(r => {
+        o[r.key] = {
+          orario: val('man_' + r.key + '_orario').trim(),
+          nome: val('man_' + r.key + '_nome').trim(),
+          carbo_g: nn('man_' + r.key + '_carbo'),
+          sodio_mg: nn('man_' + r.key + '_sodio'),
+          caffeina_mg: nn('man_' + r.key + '_caff'),
+          volume_ml: nn('man_' + r.key + '_vol')
+        };
+      });
+      return o;
+    }
+
+    // Righe attive: hanno un prodotto o almeno un valore > 0.
+    function manualRows() {
+      const o = readManual();
+      return ROWS
+        .map(r => Object.assign({ key: r.key, label: r.label }, o[r.key]))
+        .filter(r => r.nome || r.carbo_g || r.sodio_mg || r.caffeina_mg || r.volume_ml);
+    }
+
+    function manualTotals() {
+      return manualRows().reduce((a, r) => ({
+        carbo_g: a.carbo_g + r.carbo_g,
+        sodio_mg: a.sodio_mg + r.sodio_mg,
+        caffeina_mg: a.caffeina_mg + r.caffeina_mg,
+        volume_ml: a.volume_ml + r.volume_ml
+      }), { carbo_g: 0, sodio_mg: 0, caffeina_mg: 0, volume_ml: 0 });
+    }
+
+    function persist() { StorageAdapter.set('manual', readManual()); }
+
+    function render() {
+      const rows = manualRows();
+      const t = manualTotals();
+      $('manTotals').innerHTML = rows.length === 0
+        ? 'Nessuna riga manuale attiva.'
+        : 'Righe manuali attive: <b>' + rows.length + '</b> · Totali (fuori rate): <b>' +
+          fmt(t.carbo_g) + '</b> g · <b>' + fmt(t.sodio_mg) + '</b> mg Na · <b>' +
+          fmt(t.caffeina_mg) + '</b> mg caff · <b>' + fmt(t.volume_ml) + '</b> ml';
+    }
+
+    // Ripristino da storage.
+    const saved = StorageAdapter.get('manual');
+    if (saved) {
+      ROWS.forEach(r => {
+        const s = saved[r.key];
+        if (!s) return;
+        const set = (f, v) => { if (v != null && $('man_' + r.key + '_' + f)) $('man_' + r.key + '_' + f).value = v; };
+        set('orario', s.orario); set('nome', s.nome);
+        set('carbo', s.carbo_g); set('sodio', s.sodio_mg);
+        set('caff', s.caffeina_mg); set('vol', s.volume_ml);
+      });
+    }
+
+    // Wiring.
+    ROWS.forEach(r => ['orario', 'nome', 'carbo', 'sodio', 'caff', 'vol'].forEach(f => {
+      const el = $('man_' + r.key + '_' + f);
+      if (el) el.addEventListener('input', () => { persist(); render(); });
+    }));
+
+    // Esposto per gli step successivi (tabella + lista prodotti).
+    window.Fueling.manualRows = manualRows;
+    window.Fueling.getManual = readManual;
+    window.Fueling.manualTotals = manualTotals;
+
+    persist();
+    render();
   })();
 </script>
 </body>

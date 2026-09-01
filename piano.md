@@ -91,10 +91,11 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Verifica**: test jsdom 16/16 — roundDuration(303)=300, (247)=250, (75)=80, (74)=70; bici 62→60 slot 20,40,60; corsa 52→50 offset10/cad15 slot 10,25,40; target scalano con la durata (90g@60min, 135g@90min); cadenze indipendenti; persistenza offset dopo reload. Screenshot: card a due colonne. (spec §2)
 - **API esposte** (per Step 6/7): `Fueling.roundDuration`, `Fueling.buildSlots(kind)`, `Fueling.fractionTargets(kind)`, `Fueling.getConfig()`.
 
-### Step 5 — Righe manuali (colazione, pre-gara, minuto 0)
-- [ ] Tre righe con prodotto e orario a scelta; **fuori** dall'allocatore e **fuori** dai rate orari.
-- **Accettazione**: compaiono in tabella e nei totali lista prodotti, ma non spostano i g/h calcolati.
-- **Verifica**: spec §criterio 3.
+### Step 5 — Righe manuali (colazione, pre-gara, minuto 0) ✅
+- [x] Tre righe (orari default -2:30 / -0:15 / 0) con prodotto e orario a scelta + carbo/sodio/caff/volume; **fuori** dall'allocatore e **fuori** dai rate orari. Riga "attiva" se ha prodotto o un valore >0. Persistite (`fueling:manual`), con totali live.
+- **Accettazione**: compaiono nei totali (e in tabella/lista prodotti agli step 9) ma non spostano i g/h calcolati. ✅
+- **Verifica**: test jsdom 13/13 — `fractionTargets` e `buildSlots` **identici** prima/dopo l'inserimento di righe manuali (byte-per-byte); filtro righe attive (0→2→3); totali (carbo 105, sodio 200, caff 100); persistenza dopo reload. Screenshot: card tre righe integrata. (spec §3)
+- **API esposte**: `Fueling.manualRows()`, `Fueling.getManual()`, `Fueling.manualTotals()`.
 
 ### Step 6 — Vincoli di posizionamento (3 tipi)
 - [ ] Per prodotto/frazione: momento preciso (min X / metà / fine), solo prima metà, solo seconda metà.
