@@ -424,6 +424,48 @@
     margin-top: 10px;
     line-height: 1.5;
   }
+  .plan-usage-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 22px 0 10px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .plan-usage-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .usage-frac { margin-bottom: 14px; }
+  .usage-frac-head {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+  .usage-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 12px;
+    align-items: baseline;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .usage-row:last-child { border-bottom: none; }
+  .usage-name { color: var(--ink); }
+  .usage-name .u-tag {
+    font-size: 9px; color: var(--dim); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-left: 6px;
+  }
+  .usage-qty { color: var(--dim); }
+  .usage-diff { min-width: 64px; text-align: right; }
+  .usage-row.removed .usage-name { color: var(--dim); text-decoration: line-through; }
+  .usage-empty { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
 
   /* Righe manuali */
   .man-item {
@@ -939,7 +981,15 @@
       </div>
       <button type="button" class="btn-primary" id="calcPlanBtn">Calcola piano</button>
       <div id="planResult" class="plan-result"></div>
-      <div class="fuel-note">Allocatore greedy: colloca prima i vincoli «momento preciso», usa le borracce a sorsi come base distribuita sugli slot, chiude il gap carboidrati con gel e mezze barrette, poi il gap sodio con le capsule. Rispetta quantità e vincoli; non inventa prodotti. La tabella per slot e la lista prodotti completa arrivano allo Step 9.</div>
+
+      <div class="plan-usage-head">
+        <span class="plan-usage-title">Lista prodotti usati</span>
+        <button type="button" class="linklike" id="setBaselineBtn">fissa piano base</button>
+      </div>
+      <div id="planUsage" class="plan-usage"></div>
+      <div class="fuel-note" id="baselineNote"></div>
+
+      <div class="fuel-note">Allocatore greedy: colloca prima i vincoli «momento preciso», usa le borracce a sorsi come base distribuita sugli slot, chiude il gap carboidrati con gel e mezze barrette, poi il gap sodio con le capsule. Rispetta quantità e vincoli; non inventa prodotti. Cambiando la durata i rate orari e il mix restano gli stessi: la tabella si allunga/accorcia e la lista evidenzia le unità <span class="plan-ok">aggiunte</span> / <span class="plan-bad">rimosse</span> rispetto al piano base. La tabella per slot completa arriva allo Step 9.</div>
     </div>
   </section>
 
@@ -1968,11 +2018,133 @@
           run: { totals: plan.run.totals, deficit: plan.run.deficit, usage: plan.run.usage }
         });
       } catch (e) { /* no-op */ }
+      // Hook per Step 8 (diff lista prodotti vs piano base).
+      if (typeof window.Fueling.afterPlan === 'function') window.Fueling.afterPlan(plan);
     });
 
     // Esposto per test/verifica e per Step 8/9.
     window.Fueling.allocateFraction = allocateFraction;
     window.Fueling.allocatePlan = allocatePlan;
+  })();
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 8: ricalcolo durata + diff vs piano base.
+     I rate orari e il mix non cambiano: cambiando la durata, l'allocatore
+     (Step 7) riscala i target e aggiunge/toglie unità. Qui confrontiamo l'uso
+     prodotti corrente con uno snapshot "piano base" e coloriamo le differenze.
+     ========================================================================= */
+  (function () {
+    const F = window.Fueling;
+    const $ = id => document.getElementById(id);
+    const fmt = n => (Math.round(n * 100) / 100).toString();
+    const FORMATO_LABEL = { gel: 'Gel', barretta: 'Barretta', borraccia: 'Borraccia', capsula: 'Capsula' };
+    const KIND_LABEL = { bike: 'Bici', run: 'Corsa' };
+
+    // Uso prodotti di una frazione: [{id, nome, formato, units}] (con nomi da inventario).
+    function usageList(pl, kind) {
+      const inv = F.loadInv(kind) || [];
+      const byId = {}; inv.forEach(p => byId[p.id] = p);
+      return Object.keys(pl.usage || {}).map(id => {
+        const p = byId[id] || {};
+        return { id, nome: p.nome || '(rimosso)', formato: p.formato || '?', units: pl.usage[id] };
+      });
+    }
+
+    function snapshot(plan) {
+      return { ts: Date.now(), bike: usageList(plan.bike, 'bike'), run: usageList(plan.run, 'run') };
+    }
+
+    function setBaseline() {
+      const plan = F.allocatePlan();
+      const snap = snapshot(plan);
+      StorageAdapter.set('baseline', snap);
+      return { plan, snap };
+    }
+
+    // Diff per frazione: unione prodotti base+corrente con delta e stato.
+    function diffFraction(curArr, baseArr) {
+      const cur = {}; curArr.forEach(r => cur[r.id] = r);
+      const base = {}; (baseArr || []).forEach(r => base[r.id] = r);
+      const ids = Array.from(new Set([...Object.keys(cur), ...Object.keys(base)]));
+      const rows = ids.map(id => {
+        const c = cur[id], b = base[id];
+        const curU = c ? c.units : 0;
+        const baseU = b ? b.units : 0;
+        const delta = curU - baseU;
+        let state = 'same';
+        if (baseU === 0 && curU > 0) state = 'added';
+        else if (curU === 0 && baseU > 0) state = 'removed';
+        else if (delta > 1e-9) state = 'increased';
+        else if (delta < -1e-9) state = 'decreased';
+        return {
+          id, nome: (c || b).nome, formato: (c || b).formato,
+          units: curU, baseUnits: baseU, delta, state
+        };
+      });
+      rows.sort((a, b) => a.nome.localeCompare(b.nome));
+      return rows;
+    }
+
+    function planDiff() {
+      const plan = F.allocatePlan();
+      let base = StorageAdapter.get('baseline');
+      if (!base) { base = snapshot(plan); StorageAdapter.set('baseline', base); } // primo piano = base
+      return {
+        plan, base,
+        bike: diffFraction(usageList(plan.bike, 'bike'), base.bike),
+        run: diffFraction(usageList(plan.run, 'run'), base.run)
+      };
+    }
+
+    /* ---- Rendering ---- */
+    function diffBadge(r) {
+      if (r.state === 'added') return '<span class="plan-ok">+' + fmt(r.delta) + ' (nuovo)</span>';
+      if (r.state === 'removed') return '<span class="plan-bad">−' + fmt(r.baseUnits) + ' (rimosso)</span>';
+      if (r.state === 'increased') return '<span class="plan-ok">+' + fmt(r.delta) + '</span>';
+      if (r.state === 'decreased') return '<span class="plan-bad">' + fmt(r.delta) + '</span>';
+      return '<span style="opacity:.5">=</span>';
+    }
+    function renderFracUsage(kind, rows, hasBaseline) {
+      let h = '<div class="usage-frac"><div class="usage-frac-head">' + KIND_LABEL[kind] + '</div>';
+      const visible = rows.filter(r => r.units > 0 || r.state === 'removed');
+      if (visible.length === 0) { h += '<div class="usage-empty">Nessun prodotto usato.</div></div>'; return h; }
+      h += visible.map(r =>
+        '<div class="usage-row ' + (r.state === 'removed' ? 'removed' : '') + '">' +
+        '<span class="usage-name">' + escapeHtml(r.nome) + '<span class="u-tag">' + (FORMATO_LABEL[r.formato] || r.formato) + '</span></span>' +
+        '<span class="usage-qty">×' + fmt(r.units) + '</span>' +
+        '<span class="usage-diff">' + (hasBaseline ? diffBadge(r) : '') + '</span>' +
+        '</div>'
+      ).join('');
+      h += '</div>';
+      return h;
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function render(plan) {
+      const d = planDiff(); // usa/crea baseline, calcola diff sul piano corrente
+      const base = d.base;
+      const hasBaseline = !!base;
+      $('planUsage').innerHTML = renderFracUsage('bike', d.bike, hasBaseline) + renderFracUsage('run', d.run, hasBaseline);
+      const when = base && base.ts ? new Date(base.ts).toLocaleString('it-IT') : '—';
+      $('baselineNote').textContent = 'Piano base fissato il ' + when + '. Le differenze mostrano le unità aggiunte/rimosse rispetto ad esso; usa «fissa piano base» per aggiornarlo al piano corrente.';
+    }
+
+    // Hook chiamato da Step 7 dopo ogni «Calcola piano».
+    F.afterPlan = function (plan) { render(plan); };
+
+    $('setBaselineBtn').addEventListener('click', () => {
+      setBaseline();
+      // ricalcola e mostra (diff ora tutto "="), aggiornando anche i totali del pannello.
+      $('calcPlanBtn').click();
+    });
+
+    // Esposto per test.
+    F.planDiff = planDiff;
+    F.setPlanBaseline = setBaseline;
   })();
 </script>
 </body>

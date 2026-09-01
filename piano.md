@@ -114,11 +114,12 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Verifica**: test jsdom 20/20 — sufficiente (borraccia 30/300/500 + gel×3 + caps×2, target 90/500/500): carbo=90, sodio=500, liquidi=500 esatti, usa 2/3 gel, 1/2 caps, 1 borraccia, liquido = 500/3 per slot; insufficiente (1 gel): deficit carbo=30, usage≤disponibile, ok=false; momento "fine" → tutte le unità all'ultimo slot; prima_meta → solo slot ammessi ([20]); inventario vuoto → deficit pieno, nessun uso, nessun crash; mezza barretta. Rendering verificato (deficit colorato, lastplan persistito) + screenshot. (spec §5, §6)
 - **API esposte**: `Fueling.allocateFraction(kind)`, `Fueling.allocatePlan()`.
 
-### Step 8 — Ricalcolo durata (diff)
-- [ ] Se la durata cambia (es. +30 min): mantenere **stessi rate orari e stesso mix**; allungare/accorciare tabella; aggiungere/togliere unità dai prodotti dell'inventario.
-- [ ] Nella lista prodotti finale: differenze vs piano iniziale evidenziate a colore (aggiunti/rimossi). Deficit come sopra se non bastano.
-- **Accettazione**: +30 min estende la tabella e colora le unità aggiunte/rimosse.
-- **Verifica**: spec §criterio 8.
+### Step 8 — Ricalcolo durata (diff) ✅
+- [x] Rate orari e mix invariati (sono config): cambiando la durata l'allocatore (Step 7) riscala i target e aggiunge/toglie unità. Slot ricalcolati da `buildSlots` (tabella si allunga/accorcia).
+- [x] Snapshot "piano base" (`fueling:baseline`) + confronto con il piano corrente: lista prodotti usati con badge **aggiunto/aumentato** (verde) e **rimosso/diminuito** (rosso); primo calcolo = base automatica; bottone «fissa piano base» per aggiornarla. Deficit invariato dallo Step 7.
+- **Accettazione**: +durata estende la tabella e colora le unità aggiunte/rimosse. ✅
+- **Verifica**: test jsdom 11/11 — base 3 gel @60′; +60′→6 gel (+3, increased); −a 40′→2 gel (−1, decreased); prodotto reso indisponibile→removed vs base; prodotto nuovo usato→added; rendering con classi colore; persistenza baseline dopo reload. Screenshot: Gel ×6 (+3) e Salt caps (+2) in verde.
+- **API esposte**: `Fueling.planDiff()`, `Fueling.setPlanBaseline()`, hook `Fueling.afterPlan`.
 
 ### Step 9 — Output: tabelle e riepilogo
 - [ ] Tabella per slot (righe = tick cadenza + righe manuali), divisa per frazione.
