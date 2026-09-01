@@ -139,11 +139,15 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **API esposte**: `Fueling.buildExportModel()`, `Fueling.exportPDF()`.
 - **Nota offline**: la libreria è CDN → serve rete al primo caricamento (deroga D1 accettata).
 
-### Step 11 — UI refresh leggero
-- [ ] Audit read-only preliminare (skill `improve-ui`), poi pass con `baseline-ui` (spacing/gerarchia/tipografia), `frontend-design`, `fixing-accessibility`.
-- [ ] Integrare visivamente la sezione fueling con l'esistente; identità invariata (D4).
-- **Accettazione**: facciata più pulita, nessuna regressione d'identità, accessibilità migliorata (label, focus, contrasto).
-- **Verifica**: confronto prima/dopo; nessun cambiamento alla logica calcolo tempi.
+### Step 11 — UI refresh leggero ✅
+- [x] Audit con `baseline-ui` + `fixing-accessibility` (skill caricate). Fix mirati, nessun redesign, identità invariata (D4).
+- [x] **Focus visibile da tastiera**: gli input azzeravano l'outline su `:focus` → aggiunti anelli `:focus-visible` con accent su input/select/bottoni/link (mouse invariato).
+- [x] **Annunci screen reader**: `aria-live="polite"` su `#planResult` e `#reportBody`, `role="status"` su `#pdfNote`; preview live-typing lasciate mute per non spammare.
+- [x] **Form**: `aria-describedby="prodError"` sul nome prodotto; empty-state inventario con azione successiva.
+- [x] **Motion**: `@media (prefers-reduced-motion: reduce)` azzera transizioni/animazioni.
+- [x] **Tipografia/dati**: `text-wrap: balance` su titoli, `pretty` su paragrafi, `tabular-nums` sulle tabelle dati; leggero bump contrasto `.stat-label`.
+- **Accettazione**: facciata più pulita, nessuna regressione d'identità, accessibilità migliorata. ✅
+- **Verifica**: regressione completa step 3–10 = 121/121 (CSS/markup non toccano la logica); screenshot: header/calcolatore identici (Bebas Neue + JetBrains Mono, accent lime, colori disciplina). Nessuna modifica alla logica calcolo tempi.
 
 ### Step 12 — Verifica finale criteri di successo
 - [ ] Ripercorrere tutti i checkbox "Criteri di successo (testabili)" della spec e spuntarli.

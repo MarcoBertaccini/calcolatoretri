@@ -699,6 +699,28 @@
     padding: 16px 0;
   }
 
+  /* --- UI refresh (Step 11): accessibilità + rifiniture, identità invariata --- */
+  /* Focus visibile da tastiera su tutti i controlli (gli input azzerano
+     l'outline su :focus: qui lo re-introduco solo per :focus-visible). */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .field input:focus-visible,
+  .field select:focus-visible,
+  .comp-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* Contrasto etichette sul pannello risultato chiaro */
+  .stat-label { opacity: 0.62; }
+  /* Wrapping tipografico più pulito */
+  h1, h2, .fuel-h2, .d-name, .plan-frac-head, .report-h, .cfg-frac { text-wrap: balance; }
+  .hint, .fuel-note, .cfg-preview, .report-sub, .prod-meta { text-wrap: pretty; }
+  /* Numeri allineati nei dati */
+  table.rt td, .plan-line, .hourly-row, .usage-qty { font-variant-numeric: tabular-nums; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   @media (max-width: 480px) {
     .comp-labels { display: none; }
     .comp-row { grid-template-columns: 1fr 1fr 28px; }
@@ -912,7 +934,7 @@
         <div class="row">
           <div class="field">
             <label for="pNome">Nome</label>
-            <input type="text" id="pNome" required maxlength="60">
+            <input type="text" id="pNome" required maxlength="60" aria-describedby="prodError">
           </div>
           <div class="field">
             <label for="pFormato">Formato</label>
@@ -1047,7 +1069,7 @@
         <div class="d-num">FUELING / PLAN</div>
       </div>
       <button type="button" class="btn-primary" id="calcPlanBtn">Calcola piano</button>
-      <div id="planResult" class="plan-result"></div>
+      <div id="planResult" class="plan-result" aria-live="polite"></div>
 
       <div class="plan-usage-head">
         <span class="plan-usage-title">Lista prodotti usati</span>
@@ -1067,9 +1089,9 @@
       </div>
       <div class="report-actions">
         <button type="button" class="btn-primary" id="exportPdfBtn">Esporta PDF</button>
-        <span class="fuel-note" id="pdfNote" style="margin-top:0"></span>
+        <span class="fuel-note" id="pdfNote" role="status" style="margin-top:0"></span>
       </div>
-      <div id="reportBody" class="report-body"><div class="usage-empty">Premi «Calcola piano» per generare il report.</div></div>
+      <div id="reportBody" class="report-body" aria-live="polite"><div class="usage-empty">Premi «Calcola piano» per generare il report.</div></div>
     </div>
   </section>
 
@@ -1567,7 +1589,7 @@
       const arr = loadInv(currentInv);
       const list = $('prodList');
       if (arr.length === 0) {
-        list.innerHTML = '<div class="prod-empty">Nessun prodotto in questo inventario.</div>';
+        list.innerHTML = '<div class="prod-empty">Nessun prodotto in questo inventario. Aggiungine uno col form qui sopra.</div>';
         return;
       }
       list.innerHTML = arr.map(p => {
