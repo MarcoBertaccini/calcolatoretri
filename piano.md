@@ -197,6 +197,13 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 **Nota:** un residuo di ±1 unità/ora è inevitabile con prodotti discreti (non si spezza una capsula); l'obiettivo è portarsi a quel minimo, non azzerare.
 </details>
 
+## Step 14 — Scelta frazionabilità barrette (intera / a metà) ✅
+> Origine: review utente — la frazionabilità delle barrette (spec §"Barrette: intere o a metà") era usata dall'allocatore ma **non scegliibile** dall'utente. Aiuta anche il bilanciamento orario (grana più fine).
+- [x] Checkbox **«Divisibile a metà»** nel form prodotto, visibile solo per formato *barretta* (default ON); salvata su `prod.mezza`.
+- [x] Allocatore: la mezza barretta è candidata **solo se** `prod.mezza !== false` (retrocompatibile: barrette salvate prima → divisibili).
+- [x] Indicatore in lista prodotti (`½ ok` / `solo intera`).
+- **Verifica**: `test14` 15/15 — checkbox visibile solo per barretta, default ON; mezza ON → target centrato con mezza unità (usage 1.5), nessun deficit; mezza OFF → solo intere, deficit residuo, usage intero; persistenza + edit round-trip; barretta legacy senza campo trattata come divisibile. Regressione test3–13 invariata → **183/183**.
+
 ---
 
 ## 4. Mappa criteri di successo spec → step

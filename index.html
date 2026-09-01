@@ -641,6 +641,17 @@
     color: var(--accent);
     margin: 8px 0 4px;
   }
+  .chk-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .chk-field input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  .chk-hint { color: var(--dim); font-size: 11px; }
 
   .prod-list { margin-top: 20px; }
   .prod-item {
@@ -957,6 +968,11 @@
             <div class="field"><label for="pCaff">Caffeina (mg)</label><input type="number" id="pCaff" min="0" step="1" value="0"></div>
             <div class="field"><label for="pVol">Volume (ml)</label><input type="number" id="pVol" min="0" step="1" value="0"></div>
           </div>
+        </div>
+
+        <!-- Frazionabilità (solo barretta) -->
+        <div class="row" id="barHalfRow" hidden>
+          <label class="chk-field"><input type="checkbox" id="pMezza" checked> Divisibile a metà <span class="chk-hint">— l'allocatore può usare mezze barrette (grana più fine)</span></label>
         </div>
 
         <!-- Componenti (solo borraccia) -->
@@ -1471,6 +1487,7 @@
       const isBottle = $('pFormato').value === 'borraccia';
       $('directFields').hidden = isBottle;
       $('compSection').hidden = !isBottle;
+      $('barHalfRow').hidden = $('pFormato').value !== 'barretta';
       if (isBottle && $('compList').children.length === 0) {
         $('compList').appendChild(compRow());
       }
@@ -1506,6 +1523,7 @@
       $('pVincolo').value = 'nessuno';
       $('pVincoloAncora').value = 'meta';
       $('pVincoloMinuto').value = 0;
+      $('pMezza').checked = true;
       applyFormato();
       applyVincolo();
     }
@@ -1537,6 +1555,7 @@
         prod.volume_ml = num($('pVol').value);
         prod.componenti = [];
       }
+      if (formato === 'barretta') prod.mezza = $('pMezza').checked; // divisibile a metà
       prod.vincolo = readVincolo();
 
       const arr = loadInv(currentInv);
@@ -1564,6 +1583,7 @@
         $('pCaff').value = p.caffeina_mg || 0;
         $('pVol').value = p.volume_ml || 0;
       }
+      $('pMezza').checked = (p.mezza !== false); // default sì (retrocompat)
       const v = p.vincolo || { tipo: 'nessuno' };
       $('pVincolo').value = v.tipo || 'nessuno';
       $('pVincoloAncora').value = v.ancora || 'meta';
@@ -1595,8 +1615,9 @@
       list.innerHTML = arr.map(p => {
         const t = productTotals(p);
         const compNote = p.formato === 'borraccia' ? ' · ' + (p.componenti || []).length + ' comp.' : '';
+        const barNote = p.formato === 'barretta' ? (p.mezza !== false ? ' · ½ ok' : ' · solo intera') : '';
         const meta = fmt(t.carbo_g) + ' g · ' + fmt(t.sodio_mg) + ' mg Na · ' +
-          fmt(t.caffeina_mg) + ' mg caff · ' + fmt(t.volume_ml) + ' ml · ×' + p.quantita + compNote;
+          fmt(t.caffeina_mg) + ' mg caff · ' + fmt(t.volume_ml) + ' ml · ×' + p.quantita + compNote + barNote;
         const vTxt = vincoloLabel(p.vincolo);
         const vBadge = vTxt ? '<span class="prod-vincolo">⚑ ' + vTxt + '</span>' : '';
         return '<div class="prod-item" data-id="' + p.id + '">' +
@@ -2058,7 +2079,8 @@
             const allowed = allowedSlotsFor(p, kind).filter(s => hourSet[s]); // ammessi in QUESTA ora
             if (allowed.length === 0) return;
             cands.push({ p, size: 1, val, allowed });
-            if (p.formato === 'barretta' && p.rem >= 0.5) cands.push({ p, size: 0.5, val: val / 2, allowed });
+            // mezza barretta solo se il prodotto la consente (default sì)
+            if (p.formato === 'barretta' && p.ref.mezza !== false && p.rem >= 0.5) cands.push({ p, size: 0.5, val: val / 2, allowed });
           });
           if (cands.length === 0) break; // esaurito per quest'ora → resta deficit
           cands.sort((a, b) => a.val - b.val);
