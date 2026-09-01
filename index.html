@@ -2633,5 +2633,18 @@
     F.exportPDF = exportPDF;
   })();
 </script>
+
+<script>
+  /* PIANO FUELING — Step 12: al reload ripristina a video l'ultimo piano
+     calcolato (i dati sono già in localStorage via StorageAdapter). */
+  (function () {
+    try {
+      if (window.localStorage.getItem('fueling:lastplan')) {
+        const b = document.getElementById('calcPlanBtn');
+        if (b) b.click();
+      }
+    } catch (e) { /* no-op */ }
+  })();
+</script>
 </body>
 </html>

@@ -149,11 +149,21 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Accettazione**: facciata più pulita, nessuna regressione d'identità, accessibilità migliorata. ✅
 - **Verifica**: regressione completa step 3–10 = 121/121 (CSS/markup non toccano la logica); screenshot: header/calcolatore identici (Bebas Neue + JetBrains Mono, accent lime, colori disciplina). Nessuna modifica alla logica calcolo tempi.
 
-### Step 12 — Verifica finale criteri di successo
-- [ ] Ripercorrere tutti i checkbox "Criteri di successo (testabili)" della spec e spuntarli.
-- [ ] Test persistenza: reload mantiene prodotti, inventari, ultimo piano.
-- **Accettazione**: tutti i criteri spec verdi.
-- **Verifica**: solo allora proporre merge su `main`.
+### Step 12 — Verifica finale criteri di successo ✅
+- [x] Auto-ripristino del report a video al reload se esiste `fueling:lastplan` (i dati erano già in localStorage; ora anche l'ultimo piano ricompare).
+- [x] Test end-to-end (`test12`) 30/30 + suite completa **151/151**, 0 byte NUL nel file.
+- **Criteri di successo spec (testati):**
+  - [x] 1 — durate bici/corsa dalla scheda tempi, editabili (override persistito).
+  - [x] 2 — cadenze/target indipendenti; bici 1° slot al tick (20), corsa 1° slot all'offset (10).
+  - [x] 3 — righe manuali nei totali ma NON nei rate orari (`fractionTargets` invariati).
+  - [x] 4 — borraccia con 3 componenti: totali = somma (90/600/75/500).
+  - [x] 5 — inventario sufficiente: carbo/sodio/liquidi = target (90/500/500), delta per slot.
+  - [x] 6 — inventario insufficiente: deficit a colore, usage ≤ disponibile (nessuna invenzione).
+  - [x] 7 — vincolo "metà bici" → slot più vicino alla metà, prodotto piazzato lì.
+  - [x] 8 — +30 min: la tabella si estende (più slot) e la lista evidenzia aggiunti/aumentati.
+  - [x] 9 — export PDF con tabella + riepilogo orario + lista (PDF reale, ≥1 pagina).
+  - [x] 10 — reload: `inv_bike/inv_run/config/durations/manual/baseline/lastplan` presenti + report ripristinato.
+- **Merge su `main`**: criteri verdi → pronto. Merge da eseguire su conferma dell'utente (non fatto in autonomia).
 
 ---
 
