@@ -130,10 +130,14 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Miglioria allocatore (Step 7)**: tie-break sugli slot ora sceglie il più lontano dagli slot già potenziati (`boosted`) → distribuzione più uniforme nel tempo (spec §"distribuzione uniforme"), meno clustering iniziale. La parità perfetta per-ora non è garantita con unità discrete (non richiesta): conta il totale di frazione + delta per slot. test7 invariato 20/20.
 - **API esposte**: `Fueling.renderReport(plan)`.
 
-### Step 10 — Export PDF (D1)
-- [ ] Integrare libreria PDF via CDN; export di tabella + riepilogo + lista, generazione client.
-- **Accettazione**: l'export produce un PDF leggibile con le tre parti.
-- **Verifica**: spec §criterio 9. (Confermare libreria scelta prima di aggiungerla.)
+### Step 10 — Export PDF (D1) ✅
+- [x] Libreria confermata: **jsPDF 2.5.2 + AutoTable 3.8.2** via cdnjs (UMD, versioni pinnate). PDF chiaro da stampa, testo vettoriale/selezionabile.
+- [x] `buildExportModel()` (dati puri) + `exportPDF()` (rendering): per frazione tabella per slot (incl. righe manuali) + riepilogo orario actual/target + deficit; poi lista prodotti finale (con diff) e totale complessivo incl. manuali. Bottone «Esporta PDF» con guardia "libreria non caricata".
+- **Accettazione**: export produce un PDF leggibile con le tre parti. ✅
+- **Verifica**: test jsdom+Node 15/15 — modello corretto (durate, slot incl. 2 manuali, 6 tick, hourly, totale 285, caff 100); **PDF reale generato con jsPDF+AutoTable** (datauri application/pdf, 2 pagine, AutoTable finalY>0, guardia no-lib). Estrazione testo (pdf-parse) verificata. URL cdnjs confermati coi nomi file canonici (`jspdf.umd.min.js`, `jspdf.plugin.autotable.min.js`). Regressione step 3–10: 121/121.
+- **Fix**: caratteri fuori WinAnsi nei font standard jsPDF (Δ → "var"/"Diff"; U+2212 → "-" via `pdfSafe`), così il PDF non mostra glifi errati; rimosso un byte NUL introdotto per sbaglio in una regex.
+- **API esposte**: `Fueling.buildExportModel()`, `Fueling.exportPDF()`.
+- **Nota offline**: la libreria è CDN → serve rete al primo caricamento (deroga D1 accettata).
 
 ### Step 11 — UI refresh leggero
 - [ ] Audit read-only preliminare (skill `improve-ui`), poi pass con `baseline-ui` (spacing/gerarchia/tipografia), `frontend-design`, `fixing-accessibility`.

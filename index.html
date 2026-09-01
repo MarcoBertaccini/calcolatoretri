@@ -468,6 +468,7 @@
   .usage-empty { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
 
   /* Report */
+  .report-actions { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; flex-wrap: wrap; }
   .report-section { margin-bottom: 28px; }
   .report-h {
     font-family: 'Bebas Neue', sans-serif;
@@ -1063,6 +1064,10 @@
       <div class="d-header">
         <div class="d-name">Report piano</div>
         <div class="d-num">FUELING / OUT</div>
+      </div>
+      <div class="report-actions">
+        <button type="button" class="btn-primary" id="exportPdfBtn">Esporta PDF</button>
+        <span class="fuel-note" id="pdfNote" style="margin-top:0"></span>
       </div>
       <div id="reportBody" class="report-body"><div class="usage-empty">Premi «Calcola piano» per generare il report.</div></div>
     </div>
@@ -2393,6 +2398,217 @@
     };
 
     F.renderReport = renderOutput;
+  })();
+</script>
+
+<!-- jsPDF + AutoTable via CDN (D1: libreria PDF). Serve rete al primo caricamento. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 10: export PDF (jsPDF + AutoTable).
+     buildExportModel() = dati puri (testabili); exportPDF() = rendering.
+     PDF chiaro da stampa: tabella per slot + riepilogo orario + lista prodotti
+     + totali, per entrambe le frazioni. Le righe manuali sono incluse.
+     ========================================================================= */
+  (function () {
+    const F = window.Fueling;
+    const $ = id => document.getElementById(id);
+    const r1 = n => Math.round(n * 10) / 10;
+    const fmt = n => String(r1(n));
+    const KIND_LABEL = { bike: 'Bici', run: 'Corsa' };
+    const FORMATO_LABEL = { gel: 'Gel', barretta: 'Barretta', borraccia: 'Borraccia', capsula: 'Capsula' };
+
+    function hourly(pl, kind) {
+      const cfg = F.getConfig()[kind];
+      const total = pl.roundedMin;
+      const nB = Math.max(1, Math.ceil(total / 60));
+      const b = [];
+      for (let i = 0; i < nB; i++) { const s = i * 60, e = Math.min((i + 1) * 60, total); b.push({ s, e, mins: e - s, carbo: 0, sodio: 0, caff: 0, volume: 0 }); }
+      pl.cells.forEach(c => { const i = Math.min(nB - 1, Math.max(0, Math.ceil(c.slot / 60) - 1)); b[i].carbo += c.totals.carbo; b[i].sodio += c.totals.sodio; b[i].caff += c.totals.caff; b[i].volume += c.totals.volume; });
+      return b.map((x, i) => ({
+        ora: i + 1, range: x.s + '–' + x.e + "'",
+        carbo: x.carbo, tCarbo: cfg.carbo_gh * x.mins / 60,
+        sodio: x.sodio, tSodio: cfg.sodio_mgh * x.mins / 60,
+        liq: x.volume, tLiq: cfg.liquidi_mlh * x.mins / 60,
+        caff: x.caff
+      }));
+    }
+
+    function fractionModel(pl, kind, manual) {
+      const slots = [];
+      (kind === 'bike' ? manual : []).forEach(m => slots.push({
+        tempo: m.orario || '—', prodotti: (m.nome || m.label) + ' [manuale: ' + m.label + ']',
+        carbo: m.carbo_g, sodio: m.sodio_mg, caff: m.caffeina_mg, vol: m.volume_ml, dCarbo: null, manual: true
+      }));
+      pl.cells.forEach(c => slots.push({
+        tempo: c.slot + "'",
+        prodotti: c.items.length ? c.items.map(it => it.nome + ' ×' + fmt(it.units)).join(', ') : '—',
+        carbo: c.totals.carbo, sodio: c.totals.sodio, caff: c.totals.caff, vol: c.totals.volume,
+        dCarbo: c.delta.carbo, manual: false
+      }));
+      return {
+        kind, label: KIND_LABEL[kind], roundedMin: pl.roundedMin, nSlots: pl.nSlots,
+        slots, hourly: hourly(pl, kind),
+        targets: pl.fractionTargets, totals: pl.totals, deficit: pl.deficit
+      };
+    }
+
+    function buildExportModel() {
+      const d = F.planDiff();
+      const manual = F.manualRows();
+      const mt = F.manualTotals();
+      const prodRows = (rows, kind) => rows.filter(r => r.units > 0 || r.state === 'removed').map(r => ({
+        frazione: KIND_LABEL[kind], nome: r.nome, formato: FORMATO_LABEL[r.formato] || r.formato,
+        units: r.units,
+        diff: r.state === 'added' ? '+' + fmt(r.delta) + ' (nuovo)'
+          : r.state === 'removed' ? '-' + fmt(r.baseUnits) + ' (rimosso)'
+          : r.state === 'increased' ? '+' + fmt(r.delta)
+          : r.state === 'decreased' ? fmt(r.delta) : '='
+      }));
+      const grand = {
+        carbo: d.plan.bike.totals.carbo + d.plan.run.totals.carbo + mt.carbo_g,
+        sodio: d.plan.bike.totals.sodio + d.plan.run.totals.sodio + mt.sodio_mg,
+        caff: d.plan.bike.totals.caff + d.plan.run.totals.caff + mt.caffeina_mg,
+        volume: d.plan.bike.totals.volume + d.plan.run.totals.volume + mt.volume_ml
+      };
+      return {
+        date: new Date().toLocaleString('it-IT'),
+        durations: { bikeMin: d.plan.bike.roundedMin, runMin: d.plan.run.roundedMin },
+        fractions: [fractionModel(d.plan.bike, 'bike', manual), fractionModel(d.plan.run, 'run', manual)],
+        products: {
+          bike: prodRows(d.bike, 'bike'),
+          run: prodRows(d.run, 'run'),
+          manual: manual.map(m => ({ label: m.label, nome: m.nome || '(riga manuale)', orario: m.orario || '', carbo: m.carbo_g, sodio: m.sodio_mg, caff: m.caffeina_mg, vol: m.volume_ml }))
+        },
+        totals: grand
+      };
+    }
+
+    function getJsPDF() { return (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null; }
+
+    function exportPDF(ctorOverride, opts) {
+      opts = opts || {};
+      const JsPDF = ctorOverride || getJsPDF();
+      if (!JsPDF) return { error: 'no-lib' };
+      const m = buildExportModel();
+      // I font standard di jsPDF (WinAnsi) mappano bene trattini/·/× ecc.;
+      // solo il meno tipografico U+2212 va normalizzato a trattino ASCII.
+      const pdfSafe = s => String(s).replace(/−/g, '-');
+      const doc = new JsPDF({ unit: 'mm', format: 'a4' });
+      const MARGIN = 14, PW = doc.internal.pageSize.getWidth();
+      let y = 16;
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(20);
+      doc.text('PIANO FUELING', MARGIN, y);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120);
+      y += 6; doc.text('Generato il ' + m.date, MARGIN, y);
+      y += 5; doc.text('Durate — Bici ' + m.durations.bikeMin + ' min · Corsa ' + m.durations.runMin + ' min', MARGIN, y);
+      doc.setTextColor(0);
+
+      const ensure = (need) => { if (y + need > doc.internal.pageSize.getHeight() - MARGIN) { doc.addPage(); y = 16; } };
+      const sig = v => (v >= 0 ? '+' : '') + fmt(v);
+
+      m.fractions.forEach(fr => {
+        ensure(24);
+        y += 10;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+        doc.text(fr.label + ' — ' + fr.roundedMin + ' min · ' + fr.nSlots + ' slot', MARGIN, y);
+        y += 2;
+
+        doc.autoTable({
+          startY: y + 2,
+          margin: { left: MARGIN, right: MARGIN },
+          head: [['Tempo', 'Prodotti', 'Carbo g (var)', 'Sodio mg', 'Caff mg', 'Vol ml']],
+          body: fr.slots.map(s => [
+            s.tempo, pdfSafe(s.prodotti),
+            fmt(s.carbo) + (s.dCarbo == null ? '' : ' (' + sig(s.dCarbo) + ')'),
+            fmt(s.sodio), fmt(s.caff), fmt(s.vol)
+          ]),
+          styles: { fontSize: 8, cellPadding: 1.6 },
+          headStyles: { fillColor: [22, 24, 26], textColor: 255, fontSize: 8 },
+          columnStyles: { 1: { cellWidth: 62 } },
+          theme: 'grid'
+        });
+        y = doc.lastAutoTable.finalY + 6;
+
+        ensure(20);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+        doc.text('Riepilogo orario (actual / target)', MARGIN, y);
+        doc.autoTable({
+          startY: y + 2,
+          margin: { left: MARGIN, right: MARGIN },
+          head: [['Ora', 'Carbo g', 'Sodio mg', 'Liquidi ml', 'Caff mg']],
+          body: fr.hourly.map(h => [
+            'Ora ' + h.ora + ' (' + h.range + ')',
+            fmt(h.carbo) + ' / ' + fmt(h.tCarbo),
+            fmt(h.sodio) + ' / ' + fmt(h.tSodio),
+            fmt(h.liq) + ' / ' + fmt(h.tLiq),
+            fmt(h.caff)
+          ]),
+          styles: { fontSize: 8, cellPadding: 1.6 },
+          headStyles: { fillColor: [22, 24, 26], textColor: 255, fontSize: 8 },
+          theme: 'grid'
+        });
+        y = doc.lastAutoTable.finalY + 4;
+
+        const defs = [];
+        if (fr.deficit.carbo > 0.05) defs.push('-' + fmt(fr.deficit.carbo) + ' g carbo');
+        if (fr.deficit.sodio > 0.05) defs.push('-' + fmt(fr.deficit.sodio) + ' mg sodio');
+        if (fr.deficit.liquidi > 0.05) defs.push('-' + fmt(fr.deficit.liquidi) + ' ml liquidi');
+        if (defs.length) {
+          ensure(8);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(200, 40, 50);
+          doc.text('Deficit (inventario insufficiente): ' + defs.join(' · ') + '. Nessun prodotto inventato.', MARGIN, y);
+          doc.setTextColor(0); y += 4;
+        }
+      });
+
+      // Lista prodotti finale
+      ensure(24);
+      y += 8;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+      doc.text('Lista prodotti finale', MARGIN, y);
+      const listBody = []
+        .concat(m.products.bike.map(p => [p.frazione, p.nome, p.formato, '×' + fmt(p.units), p.diff]))
+        .concat(m.products.run.map(p => [p.frazione, p.nome, p.formato, '×' + fmt(p.units), p.diff]))
+        .concat(m.products.manual.map(p => ['Manuale', p.nome + ' [' + p.label + ']', '—', p.orario || '—', '—']));
+      doc.autoTable({
+        startY: y + 2,
+        margin: { left: MARGIN, right: MARGIN },
+        head: [['Frazione', 'Prodotto', 'Formato', 'Qtà/Orario', 'Diff vs base']],
+        body: (listBody.length ? listBody : [['—', 'Nessun prodotto', '—', '—', '—']]).map(row => row.map(pdfSafe)),
+        styles: { fontSize: 8, cellPadding: 1.6 },
+        headStyles: { fillColor: [22, 24, 26], textColor: 255, fontSize: 8 },
+        theme: 'grid'
+      });
+      y = doc.lastAutoTable.finalY + 6;
+
+      ensure(10);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+      doc.text('Totale complessivo (incl. manuali): ' + fmt(m.totals.carbo) + ' g carbo · ' +
+        fmt(m.totals.sodio) + ' mg sodio · ' + fmt(m.totals.caff) + ' mg caffeina · ' +
+        fmt(m.totals.volume) + ' ml', MARGIN, y);
+
+      if (opts.returnDoc) return { doc };
+      doc.save('piano-fueling.pdf');
+      return { doc };
+    }
+
+    $('exportPdfBtn').addEventListener('click', () => {
+      try {
+        const res = exportPDF();
+        $('pdfNote').textContent = res && res.error === 'no-lib'
+          ? 'Libreria PDF non disponibile (serve connessione al primo caricamento della pagina).'
+          : 'PDF generato.';
+      } catch (e) {
+        $('pdfNote').textContent = 'Errore nella generazione del PDF: ' + (e && e.message || e);
+      }
+    });
+
+    F.buildExportModel = buildExportModel;
+    F.exportPDF = exportPDF;
   })();
 </script>
 </body>
