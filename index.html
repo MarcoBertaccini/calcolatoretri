@@ -20,6 +20,7 @@
     --accent: #d4ff4a;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
   html, body {
     background: var(--bg);
     color: var(--ink);
@@ -508,6 +509,22 @@
     margin-left: 8px;
     vertical-align: middle;
   }
+  .vincolo-box {
+    border-top: 1px solid var(--line);
+    margin-top: 4px;
+    padding-top: 14px;
+  }
+  .prod-vincolo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 2px 7px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
   .prod-meta {
     grid-column: 1 / 2;
     font-family: 'JetBrains Mono', monospace;
@@ -772,6 +789,33 @@
           </div>
           <div id="compList"></div>
           <div class="comp-totals" id="compTotals">Totali borraccia: —</div>
+        </div>
+
+        <!-- Vincolo di posizionamento (3 tipi, per il prodotto in questa frazione) -->
+        <div class="vincolo-box">
+          <div class="row">
+            <div class="field">
+              <label for="pVincolo">Vincolo posizionamento</label>
+              <select id="pVincolo">
+                <option value="nessuno">Nessuno</option>
+                <option value="momento">Momento preciso</option>
+                <option value="prima_meta">Solo prima metà</option>
+                <option value="seconda_meta">Solo seconda metà</option>
+              </select>
+            </div>
+            <div class="field" id="vincoloAncoraWrap" hidden>
+              <label for="pVincoloAncora">Aggancio</label>
+              <select id="pVincoloAncora">
+                <option value="meta">Metà frazione</option>
+                <option value="fine">Fine frazione</option>
+                <option value="minuto">Minuto specifico</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" id="vincoloMinutoWrap" hidden>
+            <div class="field"><label for="pVincoloMinuto">Minuto</label><input type="number" id="pVincoloMinuto" min="0" step="1" value="0"></div>
+            <div class="field"></div>
+          </div>
         </div>
 
         <div class="row">
@@ -1220,6 +1264,25 @@
       if (isBottle) refreshCompTotals();
     }
 
+    /* ---- Vincolo di posizionamento (3 tipi) ---- */
+    function applyVincolo() {
+      const tipo = $('pVincolo').value;
+      const isMomento = tipo === 'momento';
+      $('vincoloAncoraWrap').hidden = !isMomento;
+      $('vincoloMinutoWrap').hidden = !(isMomento && $('pVincoloAncora').value === 'minuto');
+    }
+    function readVincolo() {
+      const tipo = $('pVincolo').value;
+      if (tipo === 'momento') {
+        const ancora = $('pVincoloAncora').value; // meta | fine | minuto
+        const v = { tipo: 'momento', ancora };
+        if (ancora === 'minuto') v.minuto = intNum($('pVincoloMinuto').value);
+        return v;
+      }
+      if (tipo === 'prima_meta' || tipo === 'seconda_meta') return { tipo };
+      return { tipo: 'nessuno' };
+    }
+
     function resetForm() {
       editingId = null;
       $('prodForm').reset();
@@ -1227,7 +1290,11 @@
       $('prodError').hidden = true;
       $('prodSubmit').textContent = 'Aggiungi';
       $('prodCancel').hidden = true;
+      $('pVincolo').value = 'nessuno';
+      $('pVincoloAncora').value = 'meta';
+      $('pVincoloMinuto').value = 0;
       applyFormato();
+      applyVincolo();
     }
 
     function showError(msg) {
@@ -1257,6 +1324,7 @@
         prod.volume_ml = num($('pVol').value);
         prod.componenti = [];
       }
+      prod.vincolo = readVincolo();
 
       const arr = loadInv(currentInv);
       const idx = arr.findIndex(p => p.id === prod.id);
@@ -1283,10 +1351,15 @@
         $('pCaff').value = p.caffeina_mg || 0;
         $('pVol').value = p.volume_ml || 0;
       }
+      const v = p.vincolo || { tipo: 'nessuno' };
+      $('pVincolo').value = v.tipo || 'nessuno';
+      $('pVincoloAncora').value = v.ancora || 'meta';
+      $('pVincoloMinuto').value = v.minuto != null ? v.minuto : 0;
       applyFormato();
+      applyVincolo();
       $('prodSubmit').textContent = 'Salva modifiche';
       $('prodCancel').hidden = false;
-      $('invCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if ($('invCard').scrollIntoView) $('invCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function deleteProduct(id) {
@@ -1311,9 +1384,11 @@
         const compNote = p.formato === 'borraccia' ? ' · ' + (p.componenti || []).length + ' comp.' : '';
         const meta = fmt(t.carbo_g) + ' g · ' + fmt(t.sodio_mg) + ' mg Na · ' +
           fmt(t.caffeina_mg) + ' mg caff · ' + fmt(t.volume_ml) + ' ml · ×' + p.quantita + compNote;
+        const vTxt = vincoloLabel(p.vincolo);
+        const vBadge = vTxt ? '<span class="prod-vincolo">⚑ ' + vTxt + '</span>' : '';
         return '<div class="prod-item" data-id="' + p.id + '">' +
           '<div><span class="prod-name">' + escapeHtml(p.nome) + '</span>' +
-          '<span class="prod-tag">' + FORMATO_LABEL[p.formato] + '</span></div>' +
+          '<span class="prod-tag">' + FORMATO_LABEL[p.formato] + '</span>' + vBadge + '</div>' +
           '<div class="prod-actions">' +
           '<button type="button" class="linklike act-edit">modifica</button>' +
           '<button type="button" class="linklike act-del">elimina</button></div>' +
@@ -1331,6 +1406,18 @@
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    function vincoloLabel(v) {
+      if (!v || v.tipo === 'nessuno' || !v.tipo) return '';
+      if (v.tipo === 'prima_meta') return '1ª metà';
+      if (v.tipo === 'seconda_meta') return '2ª metà';
+      if (v.tipo === 'momento') {
+        if (v.ancora === 'meta') return 'a metà';
+        if (v.ancora === 'fine') return 'a fine';
+        return 'al min ' + (v.minuto != null ? v.minuto : 0);
+      }
+      return '';
+    }
+
     function setInv(which) {
       currentInv = which;
       $('invBike').classList.toggle('active', which === 'bike');
@@ -1343,6 +1430,8 @@
 
     /* ---- Wiring ---- */
     $('pFormato').addEventListener('change', applyFormato);
+    $('pVincolo').addEventListener('change', applyVincolo);
+    $('pVincoloAncora').addEventListener('change', applyVincolo);
     $('addComp').addEventListener('click', () => { $('compList').appendChild(compRow()); refreshCompTotals(); });
     $('prodForm').addEventListener('submit', onSubmit);
     $('prodCancel').addEventListener('click', resetForm);
@@ -1571,6 +1660,58 @@
 
     persist();
     render();
+  })();
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 6: risoluzione vincoli di posizionamento.
+     I dati del vincolo vivono sul prodotto (Step 3). Qui li traduciamo, per
+     una frazione, in un target/filtro sugli slot generati (Step 4).
+       - momento (ancora meta|fine|minuto)  -> slot più vicino al minuto target
+       - prima_meta / seconda_meta          -> sottoinsieme di slot ammessi
+     Tie-break "più vicino": a parità di distanza vince lo slot precedente.
+     Esattamente 3 tipi: non estendere.
+     ========================================================================= */
+  (function () {
+    // Ritorna { tipo, targetMinute?, nearestSlot?, nearestIndex?, allowedSlots }
+    function resolveConstraint(vincolo, kind) {
+      const bs = window.Fueling.buildSlots(kind);
+      const slots = bs.slots;
+      const total = bs.roundedMin;
+      const half = total / 2;
+      const tipo = (vincolo && vincolo.tipo) || 'nessuno';
+
+      if (tipo === 'prima_meta') {
+        return { tipo, allowedSlots: slots.filter(s => s <= half) };
+      }
+      if (tipo === 'seconda_meta') {
+        return { tipo, allowedSlots: slots.filter(s => s > half) };
+      }
+      if (tipo === 'momento') {
+        let target;
+        if (vincolo.ancora === 'meta') target = half;
+        else if (vincolo.ancora === 'fine') target = total;
+        else target = Math.max(0, +vincolo.minuto || 0);
+        // slot più vicino al target (tie -> slot precedente / minuto minore)
+        let bestIdx = -1, bestDist = Infinity;
+        slots.forEach((s, i) => {
+          const d = Math.abs(s - target);
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
+        });
+        return {
+          tipo,
+          targetMinute: target,
+          nearestSlot: bestIdx >= 0 ? slots[bestIdx] : null,
+          nearestIndex: bestIdx,
+          allowedSlots: bestIdx >= 0 ? [slots[bestIdx]] : []
+        };
+      }
+      // nessuno
+      return { tipo: 'nessuno', allowedSlots: slots.slice() };
+    }
+
+    window.Fueling.resolveConstraint = resolveConstraint;
   })();
 </script>
 </body>

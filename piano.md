@@ -97,10 +97,13 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Verifica**: test jsdom 13/13 — `fractionTargets` e `buildSlots` **identici** prima/dopo l'inserimento di righe manuali (byte-per-byte); filtro righe attive (0→2→3); totali (carbo 105, sodio 200, caff 100); persistenza dopo reload. Screenshot: card tre righe integrata. (spec §3)
 - **API esposte**: `Fueling.manualRows()`, `Fueling.getManual()`, `Fueling.manualTotals()`.
 
-### Step 6 — Vincoli di posizionamento (3 tipi)
-- [ ] Per prodotto/frazione: momento preciso (min X / metà / fine), solo prima metà, solo seconda metà.
-- **Accettazione**: vincolo "metà bici" colloca il prodotto nello slot più vicino alla metà frazione.
-- **Verifica**: spec §criterio 7.
+### Step 6 — Vincoli di posizionamento (3 tipi) ✅
+- [x] Sul prodotto (l'inventario è già per-frazione): **momento preciso** (aggancio metà / fine / minuto X), **solo prima metà**, **solo seconda metà**. Esattamente 3 tipi. UI nel form con sub-campi condizionali; badge in lista; persistito col prodotto.
+- [x] Resolver `Fueling.resolveConstraint(vincolo, kind)` → per momento: slot più vicino al minuto target (tie → slot precedente); per prima/seconda metà: sottoinsieme di slot ammessi (`≤half` / `>half`); nessuno → tutti.
+- **Accettazione**: vincolo "metà bici" → slot più vicino alla metà (dur 80/cad 20 → slot 40 esatto). ✅
+- **Verifica**: test jsdom 15/15 — meta→40 (esatto) e →20 (tie, precedente), fine→60, min33→40, prima_meta→[20], seconda_meta→[40,60], nessuno→tutti; vincolo salvato/ripristinato sul prodotto (incl. edit dopo reload); badge in lista; visibilità sub-campi.
+- **Bugfix**: aggiunto `[hidden]{display:none!important}` — una regola d'autore (`.row{display:grid}`) batteva lo stile UA di `[hidden]`, lasciando visibile il campo "Minuto"; jsdom non lo rilevava (non calcola CSS), lo screenshot sì.
+- **API esposte**: `Fueling.resolveConstraint(vincolo, kind)`.
 
 ### Step 7 — Allocatore greedy (Opzione A)
 - [ ] Ordine: (1) momenti precisi → (2) borracce a sorsi come base distribuita (rispettando prima/seconda metà) → (3) gap carbo con gel + mezze barrette → (4) gap sodio con capsule.
