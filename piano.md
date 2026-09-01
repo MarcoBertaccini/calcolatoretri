@@ -77,11 +77,11 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Accettazione**: cambiando i tempi nel calcolatore le durate fueling si aggiornano finché l'utente non le sovrascrive. ✅
 - **Verifica**: simulazione Node (DOM stub) — init bici 38/corsa 25; bici 40 km → 75; override corsa 60 tiene al cambio distanza; «sync» ripristina 50; persistenza OK. Screenshot: sezione integrata nell'estetica esistente. (spec §1)
 
-### Step 3 — CRUD prodotti + inventari separati
-- [ ] Form prodotto (campi modello §2); lista prodotti; inventari **bici** e **corsa** distinti.
-- [ ] Formato "borraccia": mini-form componenti; totali borraccia = somma componenti.
-- **Accettazione**: borraccia con 3 componenti mostra totali = somma (spec §criterio 4).
-- **Verifica**: creare prodotti di ogni formato; persistono via adapter.
+### Step 3 — CRUD prodotti + inventari separati ✅
+- [x] Form prodotto (campi modello §2) con create/edit/delete; lista prodotti; inventari **bici** (`fueling:inv_bike`) e **corsa** (`fueling:inv_run`) distinti, toggle in UI.
+- [x] Formato "borraccia": mini-form componenti dinamici; totali borraccia = somma componenti (denormalizzati nel prodotto salvato). Gel/barretta/capsula: campi diretti. Validazione input (nome obbligatorio, numerici ≥0, ≥1 componente per borraccia).
+- **Accettazione**: borraccia con 3 componenti → totali = somma. ✅ (test: carbo 90, sodio 600, caff 75, volume 500)
+- **Verifica**: test jsdom 17/17 — add di ogni formato, borraccia=somma, inventari separati, validazione nome vuoto, delete, persistenza dopo reload. Screenshot: form integrato nell'estetica.
 
 ### Step 4 — Config frazione: cadenza, target, offset corsa, arrotondamento D2
 - [ ] Cadenza indipendente bici/corsa; target g/h, mg/h, ml/h indipendenti per frazione; niente target caffeina.

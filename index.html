@@ -340,8 +340,132 @@
     line-height: 1.5;
     margin-top: 14px;
   }
+  .fuel-note[role="alert"] { color: var(--run); }
+
+  /* Inventario */
+  .inv-mode { margin: 4px 0 20px; }
+  .field select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .field select:focus { outline: none; border-color: var(--accent-color); }
+  .prod-form .row { margin-bottom: 12px; }
+  .form-actions { display: flex; align-items: center; gap: 14px; }
+  .btn-primary {
+    background: var(--accent);
+    color: #0d0e0f;
+    border: none;
+    padding: 12px 22px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+
+  .comp-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 8px 0 10px;
+  }
+  .comp-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .comp-labels, .comp-row {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr 28px;
+    gap: 8px;
+    align-items: center;
+  }
+  .comp-labels {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .comp-row { margin-bottom: 8px; }
+  .comp-row input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 9px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+  .comp-row input:focus { outline: none; border-color: var(--bike); }
+  .comp-row .c-del {
+    font-size: 16px;
+    text-decoration: none;
+    text-align: center;
+  }
+  .comp-totals {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    margin: 8px 0 4px;
+  }
+
+  .prod-list { margin-top: 20px; }
+  .prod-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 14px;
+    align-items: center;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+  .prod-item:last-child { border-bottom: 1px solid var(--line); }
+  .prod-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.03em;
+  }
+  .prod-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #0d0e0f;
+    background: var(--bike);
+    padding: 2px 7px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .prod-meta {
+    grid-column: 1 / 2;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 3px;
+  }
+  .prod-actions { grid-row: 1 / 3; display: flex; gap: 12px; align-items: center; }
+  .prod-empty {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    padding: 16px 0;
+  }
 
   @media (max-width: 480px) {
+    .comp-labels { display: none; }
+    .comp-row { grid-template-columns: 1fr 1fr 28px; }
     .row { grid-template-columns: 1fr; }
     .presets { grid-template-columns: repeat(2, 1fr); }
     .breakdown-row { grid-template-columns: 16px 1fr auto; }
@@ -504,6 +628,76 @@
         </div>
       </div>
       <div class="fuel-note">Durate in minuti, precompilate dal calcolo tempi e modificabili a mano. Dopo una modifica manuale il valore resta fisso: usa «sync da calcolo» per ripristinare quello calcolato.</div>
+    </div>
+
+    <!-- ===== INVENTARIO PRODOTTI ===== -->
+    <div class="discipline" data-d="bike" id="invCard">
+      <div class="d-header">
+        <div class="d-name">Inventario prodotti</div>
+        <div class="d-num">FUELING / INV</div>
+      </div>
+
+      <div class="mode inv-mode">
+        <button type="button" id="invBike" class="active">Inventario bici</button>
+        <button type="button" id="invRun">Inventario corsa</button>
+      </div>
+
+      <form id="prodForm" class="prod-form" autocomplete="off">
+        <div class="row">
+          <div class="field">
+            <label for="pNome">Nome</label>
+            <input type="text" id="pNome" required maxlength="60">
+          </div>
+          <div class="field">
+            <label for="pFormato">Formato</label>
+            <select id="pFormato">
+              <option value="gel">Gel</option>
+              <option value="barretta">Barretta</option>
+              <option value="borraccia">Borraccia</option>
+              <option value="capsula">Capsula</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Campi diretti (gel / barretta / capsula) -->
+        <div id="directFields">
+          <div class="row">
+            <div class="field"><label for="pCarbo">Carbo (g)</label><input type="number" id="pCarbo" min="0" step="0.1" value="0"></div>
+            <div class="field"><label for="pSodio">Sodio (mg)</label><input type="number" id="pSodio" min="0" step="1" value="0"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="pCaff">Caffeina (mg)</label><input type="number" id="pCaff" min="0" step="1" value="0"></div>
+            <div class="field"><label for="pVol">Volume (ml)</label><input type="number" id="pVol" min="0" step="1" value="0"></div>
+          </div>
+        </div>
+
+        <!-- Componenti (solo borraccia) -->
+        <div id="compSection" hidden>
+          <div class="comp-head">
+            <span class="comp-title">Componenti borraccia</span>
+            <button type="button" class="linklike" id="addComp">+ aggiungi componente</button>
+          </div>
+          <div class="comp-labels">
+            <span>nome</span><span>carbo g</span><span>sodio mg</span><span>caff mg</span><span>vol ml</span><span></span>
+          </div>
+          <div id="compList"></div>
+          <div class="comp-totals" id="compTotals">Totali borraccia: —</div>
+        </div>
+
+        <div class="row">
+          <div class="field"><label for="pQta">Quantità disponibile</label><input type="number" id="pQta" min="0" step="1" value="1"></div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" id="prodSubmit">Aggiungi</button>
+              <button type="button" class="linklike" id="prodCancel" hidden>annulla</button>
+            </div>
+          </div>
+        </div>
+        <div class="fuel-note" id="prodError" role="alert" hidden></div>
+      </form>
+
+      <div class="prod-list" id="prodList"></div>
     </div>
   </section>
 
@@ -799,6 +993,230 @@
     if (saved && state.bikeOverride) bikeDurEl.value = saved.bikeMin; else syncBike(true);
     if (saved && state.runOverride)  runDurEl.value  = saved.runMin;  else syncRun(true);
     refreshHints();
+  })();
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 3: CRUD prodotti + inventari separati bici/corsa
+     Due liste distinte (fueling:inv_bike / fueling:inv_run) via StorageAdapter.
+     Formato borraccia: mini-form componenti; totali borraccia = somma
+     componenti (spec criterio 4). Gel/barretta/capsula: campi diretti.
+     ========================================================================= */
+  (function () {
+    const INV_KEYS = { bike: 'inv_bike', run: 'inv_run' };
+    let currentInv = 'bike';
+    let editingId = null;
+
+    const $ = id => document.getElementById(id);
+    const uid = () => 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const num = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 0; };
+    const intNum = v => { const n = parseInt(v, 10); return isFinite(n) && n > 0 ? n : 0; };
+
+    const loadInv = which => StorageAdapter.get(INV_KEYS[which], []) || [];
+    const saveInv = (which, arr) => StorageAdapter.set(INV_KEYS[which], arr);
+
+    // Totali prodotto: borraccia = somma componenti; altri = campi diretti.
+    function productTotals(p) {
+      if (p.formato === 'borraccia') {
+        return (p.componenti || []).reduce((a, c) => ({
+          carbo_g: a.carbo_g + num(c.carbo_g),
+          sodio_mg: a.sodio_mg + num(c.sodio_mg),
+          caffeina_mg: a.caffeina_mg + num(c.caffeina_mg),
+          volume_ml: a.volume_ml + num(c.volume_ml)
+        }), { carbo_g: 0, sodio_mg: 0, caffeina_mg: 0, volume_ml: 0 });
+      }
+      return {
+        carbo_g: num(p.carbo_g), sodio_mg: num(p.sodio_mg),
+        caffeina_mg: num(p.caffeina_mg), volume_ml: num(p.volume_ml)
+      };
+    }
+
+    const fmt = n => (Math.round(n * 10) / 10).toString();
+
+    /* ---- Componenti borraccia (righe dinamiche) ---- */
+    function compRow(data = {}) {
+      const row = document.createElement('div');
+      row.className = 'comp-row';
+      row.innerHTML =
+        '<input class="c-nome" type="text" maxlength="40" placeholder="nome">' +
+        '<input class="c-carbo" type="number" min="0" step="0.1" value="0">' +
+        '<input class="c-sodio" type="number" min="0" step="1" value="0">' +
+        '<input class="c-caff" type="number" min="0" step="1" value="0">' +
+        '<input class="c-vol" type="number" min="0" step="1" value="0">' +
+        '<button type="button" class="linklike c-del" aria-label="rimuovi componente">×</button>';
+      row.querySelector('.c-nome').value = data.nome || '';
+      row.querySelector('.c-carbo').value = data.carbo_g != null ? data.carbo_g : 0;
+      row.querySelector('.c-sodio').value = data.sodio_mg != null ? data.sodio_mg : 0;
+      row.querySelector('.c-caff').value = data.caffeina_mg != null ? data.caffeina_mg : 0;
+      row.querySelector('.c-vol').value = data.volume_ml != null ? data.volume_ml : 0;
+      row.querySelector('.c-del').addEventListener('click', () => { row.remove(); refreshCompTotals(); });
+      row.querySelectorAll('input').forEach(i => i.addEventListener('input', refreshCompTotals));
+      return row;
+    }
+
+    function readComponents() {
+      return Array.from($('compList').querySelectorAll('.comp-row')).map(r => ({
+        nome: r.querySelector('.c-nome').value.trim(),
+        carbo_g: num(r.querySelector('.c-carbo').value),
+        sodio_mg: num(r.querySelector('.c-sodio').value),
+        caffeina_mg: num(r.querySelector('.c-caff').value),
+        volume_ml: num(r.querySelector('.c-vol').value)
+      }));
+    }
+
+    function refreshCompTotals() {
+      const t = productTotals({ formato: 'borraccia', componenti: readComponents() });
+      $('compTotals').textContent =
+        'Totali borraccia: ' + fmt(t.carbo_g) + ' g carbo · ' + fmt(t.sodio_mg) +
+        ' mg sodio · ' + fmt(t.caffeina_mg) + ' mg caff · ' + fmt(t.volume_ml) + ' ml';
+    }
+
+    /* ---- Form: mostra/nascondi campi in base al formato ---- */
+    function applyFormato() {
+      const isBottle = $('pFormato').value === 'borraccia';
+      $('directFields').hidden = isBottle;
+      $('compSection').hidden = !isBottle;
+      if (isBottle && $('compList').children.length === 0) {
+        $('compList').appendChild(compRow());
+      }
+      if (isBottle) refreshCompTotals();
+    }
+
+    function resetForm() {
+      editingId = null;
+      $('prodForm').reset();
+      $('compList').innerHTML = '';
+      $('prodError').hidden = true;
+      $('prodSubmit').textContent = 'Aggiungi';
+      $('prodCancel').hidden = true;
+      applyFormato();
+    }
+
+    function showError(msg) {
+      $('prodError').textContent = msg;
+      $('prodError').hidden = false;
+    }
+
+    /* ---- Salvataggio (create/update) ---- */
+    function onSubmit(e) {
+      e.preventDefault();
+      const nome = $('pNome').value.trim();
+      const formato = $('pFormato').value;
+      if (!nome) { showError('Il nome è obbligatorio.'); return; }
+
+      let prod = { id: editingId || uid(), nome, formato, quantita: intNum($('pQta').value) };
+
+      if (formato === 'borraccia') {
+        const componenti = readComponents().filter(c =>
+          c.nome || c.carbo_g || c.sodio_mg || c.caffeina_mg || c.volume_ml);
+        if (componenti.length === 0) { showError('Aggiungi almeno un componente alla borraccia.'); return; }
+        prod.componenti = componenti;
+        Object.assign(prod, productTotals(prod)); // totali denormalizzati = somma componenti
+      } else {
+        prod.carbo_g = num($('pCarbo').value);
+        prod.sodio_mg = num($('pSodio').value);
+        prod.caffeina_mg = num($('pCaff').value);
+        prod.volume_ml = num($('pVol').value);
+        prod.componenti = [];
+      }
+
+      const arr = loadInv(currentInv);
+      const idx = arr.findIndex(p => p.id === prod.id);
+      if (idx >= 0) arr[idx] = prod; else arr.push(prod);
+      saveInv(currentInv, arr);
+      resetForm();
+      renderList();
+    }
+
+    /* ---- Edit: carica un prodotto nel form ---- */
+    function editProduct(id) {
+      const p = loadInv(currentInv).find(x => x.id === id);
+      if (!p) return;
+      editingId = id;
+      $('pNome').value = p.nome;
+      $('pFormato').value = p.formato;
+      $('pQta').value = p.quantita;
+      $('compList').innerHTML = '';
+      if (p.formato === 'borraccia') {
+        (p.componenti || []).forEach(c => $('compList').appendChild(compRow(c)));
+      } else {
+        $('pCarbo').value = p.carbo_g || 0;
+        $('pSodio').value = p.sodio_mg || 0;
+        $('pCaff').value = p.caffeina_mg || 0;
+        $('pVol').value = p.volume_ml || 0;
+      }
+      applyFormato();
+      $('prodSubmit').textContent = 'Salva modifiche';
+      $('prodCancel').hidden = false;
+      $('invCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function deleteProduct(id) {
+      const arr = loadInv(currentInv).filter(p => p.id !== id);
+      saveInv(currentInv, arr);
+      if (editingId === id) resetForm();
+      renderList();
+    }
+
+    const FORMATO_LABEL = { gel: 'Gel', barretta: 'Barretta', borraccia: 'Borraccia', capsula: 'Capsula' };
+
+    /* ---- Render lista prodotti dell'inventario corrente ---- */
+    function renderList() {
+      const arr = loadInv(currentInv);
+      const list = $('prodList');
+      if (arr.length === 0) {
+        list.innerHTML = '<div class="prod-empty">Nessun prodotto in questo inventario.</div>';
+        return;
+      }
+      list.innerHTML = arr.map(p => {
+        const t = productTotals(p);
+        const compNote = p.formato === 'borraccia' ? ' · ' + (p.componenti || []).length + ' comp.' : '';
+        const meta = fmt(t.carbo_g) + ' g · ' + fmt(t.sodio_mg) + ' mg Na · ' +
+          fmt(t.caffeina_mg) + ' mg caff · ' + fmt(t.volume_ml) + ' ml · ×' + p.quantita + compNote;
+        return '<div class="prod-item" data-id="' + p.id + '">' +
+          '<div><span class="prod-name">' + escapeHtml(p.nome) + '</span>' +
+          '<span class="prod-tag">' + FORMATO_LABEL[p.formato] + '</span></div>' +
+          '<div class="prod-actions">' +
+          '<button type="button" class="linklike act-edit">modifica</button>' +
+          '<button type="button" class="linklike act-del">elimina</button></div>' +
+          '<div class="prod-meta">' + meta + '</div></div>';
+      }).join('');
+      list.querySelectorAll('.prod-item').forEach(item => {
+        const id = item.dataset.id;
+        item.querySelector('.act-edit').addEventListener('click', () => editProduct(id));
+        item.querySelector('.act-del').addEventListener('click', () => deleteProduct(id));
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function setInv(which) {
+      currentInv = which;
+      $('invBike').classList.toggle('active', which === 'bike');
+      $('invRun').classList.toggle('active', which === 'run');
+      // colore accento della card segue la frazione
+      $('invCard').setAttribute('data-d', which === 'bike' ? 'bike' : 'run');
+      resetForm();
+      renderList();
+    }
+
+    /* ---- Wiring ---- */
+    $('pFormato').addEventListener('change', applyFormato);
+    $('addComp').addEventListener('click', () => { $('compList').appendChild(compRow()); refreshCompTotals(); });
+    $('prodForm').addEventListener('submit', onSubmit);
+    $('prodCancel').addEventListener('click', resetForm);
+    $('invBike').addEventListener('click', () => setInv('bike'));
+    $('invRun').addEventListener('click', () => setInv('run'));
+
+    // Esposto per test/verifica manuale.
+    window.Fueling.productTotals = productTotals;
+    window.Fueling.loadInv = loadInv;
+
+    setInv('bike');
   })();
 </script>
 </body>
