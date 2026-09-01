@@ -435,6 +435,94 @@
 </div>
 
 <script>
+  /* =========================================================================
+     PIANO FUELING — Step 1: persistenza (StorageAdapter + versioning)
+     Isolato dalla logica calcolo tempi. Nessuna UI in questo step.
+     Interfaccia minima get/set/list/delete su JSON serializzabile, così
+     un domani localStorage si sostituisce con una API senza toccare il resto.
+     ========================================================================= */
+  const StorageAdapter = (() => {
+    const NS = 'fueling:';
+    // Backend astratto: oggi localStorage, domani un client API con la stessa
+    // firma get/set/delete/keys. Fallback in-memory se localStorage non è
+    // disponibile (es. privacy mode) così l'app non si rompe.
+    let backend;
+    try {
+      const probe = '__fueling_probe__';
+      window.localStorage.setItem(probe, '1');
+      window.localStorage.removeItem(probe);
+      backend = window.localStorage;
+    } catch (e) {
+      const mem = new Map();
+      backend = {
+        getItem: k => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => { mem.set(k, String(v)); },
+        removeItem: k => { mem.delete(k); },
+        get length() { return mem.size; },
+        key: i => Array.from(mem.keys())[i] ?? null
+      };
+    }
+    const full = k => NS + k;
+    return {
+      // get(key[, fallback]) -> valore deserializzato o fallback
+      get(key, fallback = null) {
+        try {
+          const raw = backend.getItem(full(key));
+          return raw === null ? fallback : JSON.parse(raw);
+        } catch (e) {
+          return fallback;
+        }
+      },
+      // set(key, value) -> value; serializza in JSON
+      set(key, value) {
+        backend.setItem(full(key), JSON.stringify(value));
+        return value;
+      },
+      // delete(key) -> void
+      delete(key) {
+        backend.removeItem(full(key));
+      },
+      // list() -> array delle chiavi (senza namespace) presenti nel backend
+      list() {
+        const out = [];
+        for (let i = 0; i < backend.length; i++) {
+          const k = backend.key(i);
+          if (k && k.startsWith(NS)) out.push(k.slice(NS.length));
+        }
+        return out;
+      }
+    };
+  })();
+
+  // Versione del modello dati. Bump ad ogni cambiamento di schema.
+  const SCHEMA_VERSION = 1;
+
+  // Punto di estensione per migrazioni future. No-op iniziale: riceve il
+  // documento letto (o null) e ritorna il documento aggiornato allo schema
+  // corrente. Le trasformazioni per-versione andranno aggiunte qui.
+  function migrateFueling(data) {
+    if (!data || typeof data !== 'object') return data;
+    // Esempio futuro:
+    // if ((data.schemaVersion || 0) < 2) { /* ...trasforma... */ data.schemaVersion = 2; }
+    return data;
+  }
+
+  // Assicura l'esistenza del documento meta versionato e applica le migrazioni.
+  // Dimostra persistenza + versioning: crea/aggiorna la chiave `fueling:__meta`.
+  function initFuelingStore() {
+    let meta = migrateFueling(StorageAdapter.get('__meta'));
+    if (!meta || typeof meta !== 'object') meta = {};
+    meta.schemaVersion = SCHEMA_VERSION;
+    StorageAdapter.set('__meta', meta);
+    return meta;
+  }
+
+  // Esposto per verifica manuale da DevTools console (nessuna UI in Step 1).
+  window.Fueling = { StorageAdapter, SCHEMA_VERSION, migrateFueling, initFuelingStore };
+
+  initFuelingStore();
+
+  /* ===== Calcolo tempi esistente (invariato) ===== */
   const PRESETS = {
     sprint:  { swim: 0.75, bike: 20,  run: 5 },
     olympic: { swim: 1.5,  bike: 40,  run: 10 },

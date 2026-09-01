@@ -64,11 +64,12 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 
 > Ogni step è piccolo e chiudibile da solo. Committare a fine step. Aprire il file nel browser per verificare (nessuna build).
 
-### Step 1 — StorageAdapter + versioning
-- [ ] Implementare `StorageAdapter` con `get/set/list/delete` su `localStorage`, JSON serializzabile, chiavi namespaced (es. `fueling:*`).
-- [ ] Aggiungere `schemaVersion` e uno stub di migrazione (funzione `migrate(data)` no-op iniziale).
-- **Accettazione**: salvando e ricaricando la pagina i dati persistono; l'interfaccia non conosce `localStorage` direttamente (solo via adapter).
-- **Verifica**: DevTools → Application → localStorage mostra le chiavi; reload mantiene lo stato.
+### Step 1 — StorageAdapter + versioning ✅
+- [x] Implementare `StorageAdapter` con `get/set/list/delete` su `localStorage`, JSON serializzabile, chiavi namespaced (`fueling:*`).
+- [x] Aggiungere `schemaVersion` e uno stub di migrazione (`migrateFueling(data)` no-op iniziale) + `initFuelingStore()` che crea/aggiorna `fueling:__meta`.
+- **Accettazione**: salvando e ricaricando la pagina i dati persistono; l'interfaccia non conosce `localStorage` direttamente (solo via adapter). ✅ + fallback in-memory se localStorage non disponibile.
+- **Verifica**: round-trip `get/set/list/delete` testato con Node (stub); `fueling:__meta` = `{"schemaVersion":1}`. In browser: DevTools → Application → localStorage mostra `fueling:__meta`; reload mantiene lo stato.
+- **Note**: adapter esposto su `window.Fueling` per verifica manuale (nessuna UI in questo step, come da piano).
 
 ### Step 2 — Sezione Fueling: scaffold + lettura durate
 - [ ] Nuova sezione "Piano Fueling" sotto il calcolatore esistente (non alterare quello esistente).
