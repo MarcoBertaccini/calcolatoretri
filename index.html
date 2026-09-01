@@ -1981,8 +1981,6 @@
         add('volume', p.t.volume_ml * units);
       }
 
-      const placed = totKey => cells.reduce((a, c) => a + c.totals[totKey], 0);
-
       // (1) Momenti precisi: tutte le unità disponibili nello slot più vicino.
       inv.forEach(p => {
         if (p.rem <= 0 || !p.vincolo || p.vincolo.tipo !== 'momento') return;
@@ -1992,42 +1990,81 @@
         p.rem = 0;
       });
 
-      // (2) Borracce a sorsi: distribuzione uniforme sugli slot ammessi.
+      // (2) Bucket orari (Step 13). Merge della coda arrotondata senza slot.
+      const cfg = F.getConfig()[kind];
+      const nB = Math.max(1, Math.ceil(roundedMin / 60));
+      const hours = [];
+      for (let i = 0; i < nB; i++) {
+        const s = i * 60, e = Math.min((i + 1) * 60, roundedMin);
+        hours.push({ start: s, end: e, mins: e - s, slots: [] });
+      }
+      slots.forEach(slot => {
+        const i = Math.min(nB - 1, Math.max(0, Math.ceil(slot / 60) - 1));
+        hours[i].slots.push(slot);
+      });
+      while (hours.length >= 2 && hours[hours.length - 1].slots.length === 0) {
+        const last = hours.pop();
+        const prev = hours[hours.length - 1];
+        prev.end = last.end; prev.mins += last.mins; // assorbe i minuti della coda
+      }
+      hours.forEach(h => {
+        h.tgt = {
+          carbo: cfg.carbo_gh * h.mins / 60,
+          sodio: cfg.sodio_mgh * h.mins / 60,
+          liquidi: cfg.liquidi_mlh * h.mins / 60
+        };
+      });
+      const hourOfSlot = {};
+      hours.forEach((h, hi) => h.slots.forEach(s => hourOfSlot[s] = hi));
+      const placedInSlots = (slotArr, totKey) =>
+        slotArr.reduce((a, s) => a + (idxOf[s] != null ? cells[idxOf[s]].totals[totKey] : 0), 0);
+
+      // (3) Borracce a sorsi, distribuite PER ORA (quota ∝ minuti dell'ora),
+      // così i liquidi sono piatti anche se la cadenza non divide 60.
       inv.forEach(p => {
         if (p.formato !== 'borraccia' || p.rem <= 0) return;
         const allowed = allowedSlotsFor(p, kind);
         if (allowed.length === 0) return;
-        const per = p.rem / allowed.length; // sorsi come frazione di borraccia per slot
-        allowed.forEach(s => addToSlot(s, p, per));
+        const allowedSet = {}; allowed.forEach(s => allowedSet[s] = 1);
+        const hAllowed = hours
+          .map((h, hi) => ({ hi, sl: h.slots.filter(s => allowedSet[s]), mins: h.mins }))
+          .filter(o => o.sl.length > 0);
+        const minsTot = hAllowed.reduce((a, o) => a + o.mins, 0) || 1;
+        const totalUnits = p.rem;
+        hAllowed.forEach(o => {
+          const per = totalUnits * (o.mins / minsTot) / o.sl.length;
+          o.sl.forEach(s => addToSlot(s, p, per));
+        });
         p.rem = 0;
       });
 
-      // (3)/(4) Chiusura gap con unità discrete, minimizzando lo scarto per slot.
-      function fillGap(totKey, prodKey, formats, fractionTgt) {
-        if (fractionTgt <= 0 || nS === 0) return;
-        const perSlot = fractionTgt / nS;
-        const boosted = []; // slot già riempiti con unità discrete in questa passata
+      // (4)/(5) Gap discreto PER ORA: carbo (gel/mezze barrette), sodio (capsule).
+      function fillHour(h, totKey, prodKey, formats) {
+        const hourSlots = h.slots;
+        if (hourSlots.length === 0) return;
+        const hourTgt = h.tgt[totKey];
+        if (hourTgt <= 0) return;
+        const perSlot = hourTgt / hourSlots.length;
+        const hourSet = {}; hourSlots.forEach(s => hourSet[s] = 1);
+        const boosted = [];
         let guard = 0;
-        while (guard++ < 10000) {
-          const gap = fractionTgt - placed(totKey);
+        while (guard++ < 5000) {
+          const gap = hourTgt - placedInSlots(hourSlots, totKey);
           if (gap <= 1e-6) break;
           const cands = [];
           inv.forEach(p => {
             if (!formats.includes(p.formato) || p.rem <= 1e-9) return;
             const val = p.t[prodKey]; if (val <= 0) return;
-            const allowed = allowedSlotsFor(p, kind);
+            const allowed = allowedSlotsFor(p, kind).filter(s => hourSet[s]); // ammessi in QUESTA ora
             if (allowed.length === 0) return;
             cands.push({ p, size: 1, val, allowed });
             if (p.formato === 'barretta' && p.rem >= 0.5) cands.push({ p, size: 0.5, val: val / 2, allowed });
           });
-          if (cands.length === 0) break; // esaurito → resta deficit
+          if (cands.length === 0) break; // esaurito per quest'ora → resta deficit
           cands.sort((a, b) => a.val - b.val);
-          // preferisci la più grande che non sfora il gap; altrimenti la più piccola se avvicina
           let move = null;
           for (let k = cands.length - 1; k >= 0; k--) { if (cands[k].val <= gap + 1e-9) { move = cands[k]; break; } }
           if (!move) { const sm = cands[0]; if (sm.val < 2 * gap - 1e-9) move = sm; else break; }
-          // slot ammesso col deficit maggiore; a parità, il più lontano dagli
-          // slot già usati (spread) per distribuire uniformemente nel tempo.
           const eps = 1e-6;
           let maxDef = -Infinity;
           move.allowed.forEach(s => { const i = idxOf[s]; if (i == null) return; const d = perSlot - cells[i].totals[totKey]; if (d > maxDef) maxDef = d; });
@@ -2035,7 +2072,7 @@
           move.allowed.forEach(s => {
             const i = idxOf[s]; if (i == null) return;
             const d = perSlot - cells[i].totals[totKey];
-            if (d < maxDef - eps) return; // solo slot col deficit (quasi) massimo
+            if (d < maxDef - eps) return; // solo slot col deficit (quasi) massimo nell'ora
             const spread = boosted.length ? Math.min.apply(null, boosted.map(f => Math.abs(f - s))) : s;
             if (spread > bestSpread) { bestSpread = spread; bi = i; bestSlot = s; }
           });
@@ -2046,8 +2083,8 @@
         }
       }
 
-      fillGap('carbo', 'carbo_g', ['gel', 'barretta'], ft.carbo_g);
-      fillGap('sodio', 'sodio_mg', ['capsula'], ft.sodio_mg);
+      hours.forEach(h => fillHour(h, 'carbo', 'carbo_g', ['gel', 'barretta']));
+      hours.forEach(h => fillHour(h, 'sodio', 'sodio_mg', ['capsula']));
 
       // Totali e delta.
       const totals = cells.reduce((a, c) => ({
@@ -2055,17 +2092,31 @@
         caff: a.caff + c.totals.caff, volume: a.volume + c.totals.volume
       }), { carbo: 0, sodio: 0, caff: 0, volume: 0 });
 
+      // Delta per slot relativo al target per-slot DELLA SUA ORA.
       const perSlot = {
         carbo: nS ? ft.carbo_g / nS : 0,
         sodio: nS ? ft.sodio_mg / nS : 0,
         liquidi: nS ? ft.liquidi_ml / nS : 0
       };
       cells.forEach(c => {
+        const h = hours[hourOfSlot[c.slot]];
+        const n = h ? h.slots.length : nS;
+        const t = h ? h.tgt : { carbo: ft.carbo_g, sodio: ft.sodio_mg, liquidi: ft.liquidi_ml };
         c.delta = {
-          carbo: c.totals.carbo - perSlot.carbo,
-          sodio: c.totals.sodio - perSlot.sodio,
-          liquidi: c.totals.volume - perSlot.liquidi
+          carbo: c.totals.carbo - (n ? t.carbo / n : 0),
+          sodio: c.totals.sodio - (n ? t.sodio / n : 0),
+          liquidi: c.totals.volume - (n ? t.liquidi / n : 0)
         };
+      });
+
+      // Totali per ora (per il riepilogo orario di report e PDF).
+      hours.forEach(h => {
+        h.totals = { carbo: 0, sodio: 0, caff: 0, volume: 0 };
+        h.slots.forEach(s => {
+          const c = cells[idxOf[s]]; if (!c) return;
+          h.totals.carbo += c.totals.carbo; h.totals.sodio += c.totals.sodio;
+          h.totals.caff += c.totals.caff; h.totals.volume += c.totals.volume;
+        });
       });
 
       const deficit = {
@@ -2082,7 +2133,7 @@
         kind, roundedMin, slots, nSlots: nS,
         fractionTargets: { carbo: ft.carbo_g, sodio: ft.sodio_mg, liquidi: ft.liquidi_ml },
         perSlotTargets: perSlot,
-        cells, totals, deficit, usage,
+        hours, cells, totals, deficit, usage,
         ok: deficit.carbo < 1e-6 && deficit.sodio < 1e-6 && deficit.liquidi < 1e-6
       };
     }
@@ -2316,33 +2367,18 @@
         '</tr></thead><tbody>' + body + '</tbody></table></div>';
     }
 
-    /* ---- Riepilogo orario ---- */
+    /* ---- Riepilogo orario (usa i bucket già bilanciati dall'allocatore) ---- */
     function fracHourly(pl, kind) {
-      const cfg = F.getConfig()[kind];
-      const total = pl.roundedMin;
-      const nB = Math.max(1, Math.ceil(total / 60));
-      const buckets = [];
-      for (let i = 0; i < nB; i++) {
-        const start = i * 60, end = Math.min((i + 1) * 60, total);
-        buckets.push({ start, end, mins: end - start, carbo: 0, sodio: 0, caff: 0, volume: 0 });
-      }
-      pl.cells.forEach(c => {
-        // il tick a fine ora (es. 60′) appartiene all'ora che chiude, non alla successiva
-        const i = Math.min(nB - 1, Math.max(0, Math.ceil(c.slot / 60) - 1));
-        const b = buckets[i];
-        b.carbo += c.totals.carbo; b.sodio += c.totals.sodio; b.caff += c.totals.caff; b.volume += c.totals.volume;
-      });
       let rows = '<div class="hourly-row head"><span>Ora</span><span>Carbo</span><span>Sodio</span><span>Liquidi</span><span>Caff</span></div>';
-      buckets.forEach((b, i) => {
-        const tC = cfg.carbo_gh * b.mins / 60, tS = cfg.sodio_mgh * b.mins / 60, tL = cfg.liquidi_mlh * b.mins / 60;
+      (pl.hours || []).forEach((b, i) => {
         const cell = (act, tgt) => {
           const bad = act < tgt - 0.5 ? ' hourly-bad' : '';
           return '<span class="' + bad.trim() + '">' + fmt(act) + '/' + fmt(tgt) + '</span>';
         };
         rows += '<div class="hourly-row">' +
           '<span class="hk">Ora ' + (i + 1) + ' <span style="opacity:.6">' + b.start + '–' + b.end + '′</span></span>' +
-          cell(b.carbo, tC) + cell(b.sodio, tS) + cell(b.volume, tL) +
-          '<span>' + fmt(b.caff) + '</span></div>';
+          cell(b.totals.carbo, b.tgt.carbo) + cell(b.totals.sodio, b.tgt.sodio) + cell(b.totals.volume, b.tgt.liquidi) +
+          '<span>' + fmt(b.totals.caff) + '</span></div>';
       });
       return rows;
     }
@@ -2443,18 +2479,13 @@
     const FORMATO_LABEL = { gel: 'Gel', barretta: 'Barretta', borraccia: 'Borraccia', capsula: 'Capsula' };
 
     function hourly(pl, kind) {
-      const cfg = F.getConfig()[kind];
-      const total = pl.roundedMin;
-      const nB = Math.max(1, Math.ceil(total / 60));
-      const b = [];
-      for (let i = 0; i < nB; i++) { const s = i * 60, e = Math.min((i + 1) * 60, total); b.push({ s, e, mins: e - s, carbo: 0, sodio: 0, caff: 0, volume: 0 }); }
-      pl.cells.forEach(c => { const i = Math.min(nB - 1, Math.max(0, Math.ceil(c.slot / 60) - 1)); b[i].carbo += c.totals.carbo; b[i].sodio += c.totals.sodio; b[i].caff += c.totals.caff; b[i].volume += c.totals.volume; });
-      return b.map((x, i) => ({
-        ora: i + 1, range: x.s + '–' + x.e + "'",
-        carbo: x.carbo, tCarbo: cfg.carbo_gh * x.mins / 60,
-        sodio: x.sodio, tSodio: cfg.sodio_mgh * x.mins / 60,
-        liq: x.volume, tLiq: cfg.liquidi_mlh * x.mins / 60,
-        caff: x.caff
+      // usa i bucket già bilanciati dall'allocatore (con merge coda)
+      return (pl.hours || []).map((h, i) => ({
+        ora: i + 1, range: h.start + '–' + h.end + "'",
+        carbo: h.totals.carbo, tCarbo: h.tgt.carbo,
+        sodio: h.totals.sodio, tSodio: h.tgt.sodio,
+        liq: h.totals.volume, tLiq: h.tgt.liquidi,
+        caff: h.totals.caff
       }));
     }
 

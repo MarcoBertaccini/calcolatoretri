@@ -167,7 +167,11 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 
 ---
 
-## Step 13 — Bilanciamento orario dell'allocatore (post-review) ⏳ DA IMPLEMENTARE
+## Step 13 — Bilanciamento orario dell'allocatore (post-review) ✅
+**Esito:** conti orari appiattiti. Es. ~5h a 90 g/h e 500 mg/h: prima carbo 118/78/88/78/88 e sodio 692/492/342/492/492 → ora **90 e 500 fissi** per ogni ora piena; liquidi ∝ minuti (piatti); "Ora 6 0/15" fantasma eliminata (coda assorbita nell'ultima ora). L'ultima ora "lunga" (che assorbe la coda) può risultare sotto target (deficit reale, mostrato a colore) se manca reintegro/inventario. `pl.hours` esposto sul piano; report (Step 9) e PDF (Step 10) ora consumano `pl.hours` (coerenza garantita). **Verifica:** `test13` 17/17 (cadenza 20 → ogni ora 90/500/500; cadenza 25 → liquidi per-minuto piatti + carbo 90/60; merge coda a 130′) + regressione test3–12 invariata → **168/168**.
+
+<details><summary>Disegno implementato</summary>
+
 > Origine: review utente — i conti orari (screenshot) oscillavano molto (es. sodio 692 vs 342, carbo 118 vs 78, liquidi 460 vs 400). Causa: l'allocatore bilancia solo il totale di frazione + lo scarto per-slot, senza vincolo per-ora; inoltre cadenza che non divide 60 → ore con numero di slot diverso; e la coda arrotondata crea un bucket orario senza slot ("Ora 6 300–310′ 0/15"). **Decisione utente: bilanciamento per ora.**
 
 **Disegno:**
@@ -191,6 +195,7 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - [ ] Screenshot del riepilogo orario prima/dopo.
 
 **Nota:** un residuo di ±1 unità/ora è inevitabile con prodotti discreti (non si spezza una capsula); l'obiettivo è portarsi a quel minimo, non azzerare.
+</details>
 
 ---
 
