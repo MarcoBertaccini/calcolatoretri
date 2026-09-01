@@ -342,6 +342,38 @@
   }
   .fuel-note[role="alert"] { color: var(--run); }
 
+  /* Config frazioni */
+  .cfg-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .cfg-col {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    padding: 16px;
+  }
+  .cfg-col[data-d="bike"] { border-left-color: var(--bike); }
+  .cfg-col[data-d="run"]  { border-left-color: var(--run); }
+  .cfg-frac {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.04em;
+    margin-bottom: 14px;
+  }
+  .cfg-col .field { margin-bottom: 10px; }
+  .cfg-preview {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--dim);
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .cfg-preview b { color: var(--accent); font-weight: 600; }
+
   /* Inventario */
   .inv-mode { margin: 4px 0 20px; }
   .field select {
@@ -628,6 +660,34 @@
         </div>
       </div>
       <div class="fuel-note">Durate in minuti, precompilate dal calcolo tempi e modificabili a mano. Dopo una modifica manuale il valore resta fisso: usa «sync da calcolo» per ripristinare quello calcolato.</div>
+    </div>
+
+    <!-- ===== CONFIG FRAZIONI: cadenza, target, offset ===== -->
+    <div class="discipline" id="cfgCard">
+      <div class="d-header">
+        <div class="d-name">Cadenza &amp; target</div>
+        <div class="d-num">FUELING / CFG</div>
+      </div>
+      <div class="cfg-grid">
+        <div class="cfg-col" data-d="bike">
+          <div class="cfg-frac">Bici</div>
+          <div class="field"><label for="cfgBikeCad">Cadenza (min)</label><input type="number" id="cfgBikeCad" min="1" step="1" value="20"></div>
+          <div class="field"><label for="cfgBikeCarbo">Carbo (g/h)</label><input type="number" id="cfgBikeCarbo" min="0" step="1" value="90"></div>
+          <div class="field"><label for="cfgBikeSodio">Sodio (mg/h)</label><input type="number" id="cfgBikeSodio" min="0" step="10" value="500"></div>
+          <div class="field"><label for="cfgBikeLiq">Liquidi (ml/h)</label><input type="number" id="cfgBikeLiq" min="0" step="10" value="500"></div>
+          <div class="cfg-preview" id="cfgBikePrev"></div>
+        </div>
+        <div class="cfg-col" data-d="run">
+          <div class="cfg-frac">Corsa</div>
+          <div class="field"><label for="cfgRunCad">Cadenza (min)</label><input type="number" id="cfgRunCad" min="1" step="1" value="15"></div>
+          <div class="field"><label for="cfgRunOffset">1° slot a (min)</label><input type="number" id="cfgRunOffset" min="0" step="1" value="10"></div>
+          <div class="field"><label for="cfgRunCarbo">Carbo (g/h)</label><input type="number" id="cfgRunCarbo" min="0" step="1" value="60"></div>
+          <div class="field"><label for="cfgRunSodio">Sodio (mg/h)</label><input type="number" id="cfgRunSodio" min="0" step="10" value="400"></div>
+          <div class="field"><label for="cfgRunLiq">Liquidi (ml/h)</label><input type="number" id="cfgRunLiq" min="0" step="10" value="400"></div>
+          <div class="cfg-preview" id="cfgRunPrev"></div>
+        </div>
+      </div>
+      <div class="fuel-note">Caffeina: nessun target orario (deriva dai prodotti scelti). La durata usata per generare gli slot e i totali di frazione è arrotondata ai <b>10 minuti</b> più vicini. Bici: 1° slot al primo tick di cadenza (il minuto 0 è coperto da una riga manuale). Corsa: 1° slot al minuto indicato, poi cadenza.</div>
     </div>
 
     <!-- ===== INVENTARIO PRODOTTI ===== -->
@@ -1217,6 +1277,132 @@
     window.Fueling.loadInv = loadInv;
 
     setInv('bike');
+  })();
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 4: config frazione (cadenza, target, offset) +
+     generazione slot + arrotondamento durata (D2).
+     - Cadenza e target indipendenti per bici e corsa. Nessun target caffeina.
+     - Durata usata per slot/totali arrotondata ai 10 min più vicini (half-up):
+       es. 5h03→5h00, 4h07→4h10.
+     - Bici: 1° slot al primo tick di cadenza. Corsa: 1° slot all'offset, poi
+       cadenza. (Il minuto 0 bici sarà una riga manuale — Step 5.)
+     ========================================================================= */
+  (function () {
+    const $ = id => document.getElementById(id);
+    const nn = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 0; }; // ≥0
+    const intMin = (v, min) => { const n = Math.floor(parseFloat(v)); return isFinite(n) && n >= min ? n : min; };
+    const fmt = n => (Math.round(n * 10) / 10).toString();
+
+    // D2: arrotonda ai 10 minuti più vicini, half-up.
+    const roundDuration = m => Math.round((parseFloat(m) || 0) / 10) * 10;
+
+    const bikeDurRaw = () => intMin($('fuelBikeDur').value, 0);
+    const runDurRaw  = () => intMin($('fuelRunDur').value, 0);
+
+    function readConfig() {
+      return {
+        bike: {
+          cadenzaMin: intMin($('cfgBikeCad').value, 1),
+          carbo_gh: nn($('cfgBikeCarbo').value),
+          sodio_mgh: nn($('cfgBikeSodio').value),
+          liquidi_mlh: nn($('cfgBikeLiq').value)
+        },
+        run: {
+          cadenzaMin: intMin($('cfgRunCad').value, 1),
+          offsetMin: intMin($('cfgRunOffset').value, 0),
+          carbo_gh: nn($('cfgRunCarbo').value),
+          sodio_mgh: nn($('cfgRunSodio').value),
+          liquidi_mlh: nn($('cfgRunLiq').value)
+        }
+      };
+    }
+
+    // Genera gli slot (minuti-tick) della frazione sulla durata arrotondata.
+    function buildSlots(kind) {
+      const cfg = readConfig()[kind];
+      const roundedMin = roundDuration(kind === 'bike' ? bikeDurRaw() : runDurRaw());
+      const cad = cfg.cadenzaMin;
+      const start = kind === 'bike' ? cad : cfg.offsetMin; // bici: primo tick; corsa: offset
+      const slots = [];
+      if (cad >= 1) {
+        for (let t = start; t <= roundedMin; t += cad) {
+          if (t >= 0) slots.push(t);
+          if (slots.length > 1000) break; // guardia
+        }
+      }
+      return { roundedMin, slots, cfg };
+    }
+
+    // Totali di frazione = target orario × ore (durata arrotondata). Uniforme.
+    function fractionTargets(kind) {
+      const { roundedMin, cfg, slots } = buildSlots(kind);
+      const h = roundedMin / 60;
+      return {
+        roundedMin, slots,
+        carbo_g: cfg.carbo_gh * h,
+        sodio_mg: cfg.sodio_mgh * h,
+        liquidi_ml: cfg.liquidi_mlh * h
+      };
+    }
+
+    function persistConfig() {
+      StorageAdapter.set('config', readConfig());
+    }
+
+    function renderPrev(kind) {
+      const t = fractionTargets(kind);
+      const raw = kind === 'bike' ? bikeDurRaw() : runDurRaw();
+      const el = $(kind === 'bike' ? 'cfgBikePrev' : 'cfgRunPrev');
+      const slotsTxt = t.slots.length ? t.slots.join(', ') : '—';
+      el.innerHTML =
+        'Durata piano: <b>' + t.roundedMin + ' min</b> (da ' + raw + ') · ' +
+        t.slots.length + ' slot' + '<br>' +
+        'Slot: ' + slotsTxt + '<br>' +
+        'Target frazione: <b>' + fmt(t.carbo_g) + '</b> g · <b>' + fmt(t.sodio_mg) +
+        '</b> mg Na · <b>' + fmt(t.liquidi_ml) + '</b> ml';
+    }
+
+    function refreshAll() { renderPrev('bike'); renderPrev('run'); }
+
+    // Ripristino config salvata.
+    const saved = StorageAdapter.get('config');
+    if (saved) {
+      const set = (id, v) => { if (v != null && $(id)) $(id).value = v; };
+      set('cfgBikeCad', saved.bike && saved.bike.cadenzaMin);
+      set('cfgBikeCarbo', saved.bike && saved.bike.carbo_gh);
+      set('cfgBikeSodio', saved.bike && saved.bike.sodio_mgh);
+      set('cfgBikeLiq', saved.bike && saved.bike.liquidi_mlh);
+      set('cfgRunCad', saved.run && saved.run.cadenzaMin);
+      set('cfgRunOffset', saved.run && saved.run.offsetMin);
+      set('cfgRunCarbo', saved.run && saved.run.carbo_gh);
+      set('cfgRunSodio', saved.run && saved.run.sodio_mgh);
+      set('cfgRunLiq', saved.run && saved.run.liquidi_mlh);
+    }
+
+    // Wiring: config inputs => persist + refresh.
+    ['cfgBikeCad', 'cfgBikeCarbo', 'cfgBikeSodio', 'cfgBikeLiq',
+     'cfgRunCad', 'cfgRunOffset', 'cfgRunCarbo', 'cfgRunSodio', 'cfgRunLiq']
+      .forEach(id => $(id).addEventListener('input', () => { persistConfig(); refreshAll(); }));
+
+    // Le durate cambiano (edit manuale, sync, preset, modalità, input calcolo):
+    // ricalcolo il preview dopo che gli handler dello Step 2 hanno aggiornato i valori.
+    const scheduleRefresh = () => setTimeout(refreshAll, 0);
+    ['fuelBikeDur', 'fuelRunDur', 'bikeSpeed', 'bikeDist', 'runPace', 'runDist']
+      .forEach(id => { const el = $(id); if (el) el.addEventListener('input', scheduleRefresh); });
+    ['fuelBikeSync', 'fuelRunSync'].forEach(id => { const el = $(id); if (el) el.addEventListener('click', scheduleRefresh); });
+    document.querySelectorAll('#presetBox button, .mode button').forEach(b => b.addEventListener('click', scheduleRefresh));
+
+    // Esposto per test/verifica e per gli step successivi (allocatore).
+    window.Fueling.roundDuration = roundDuration;
+    window.Fueling.buildSlots = buildSlots;
+    window.Fueling.fractionTargets = fractionTargets;
+    window.Fueling.getConfig = readConfig;
+
+    persistConfig();
+    refreshAll();
   })();
 </script>
 </body>

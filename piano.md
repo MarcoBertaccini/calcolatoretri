@@ -14,11 +14,11 @@
 | # | Tema | Decisione |
 |---|---|---|
 | D1 | **Export PDF** | Si usa una **libreria via CDN** (es. `html2pdf.js` o `jsPDF`). Deroga consapevole al principio "zero dipendenze runtime": serve rete al primo load. Fallback `window.print()` non richiesto. |
-| D2 | **Durata non multipla della cadenza** | La **durata di frazione usata dal pianificatore viene arrotondata al multiplo di 5 minuti più vicino** (round-half-up). Esempi dell'utente: `5h03 → 5h00`, `4h07 → 4h10`. Su questa durata arrotondata si generano gli slot e si calcolano i totali orari; niente coda residua da gestire a parte. |
+| D2 | **Durata non multipla della cadenza** | La **durata di frazione usata dal pianificatore viene arrotondata ai 10 minuti più vicini** (round-half-up, soglia a 5 min). Esempi dell'utente: `5h03 → 5h00`, `4h07 → 4h10` (3→0, 7→10: regola dei 10 min, non dei 5 — corretto in Step 4). Su questa durata arrotondata si generano gli slot e si calcolano i totali orari; niente coda residua da gestire a parte. |
 | D3 | **Ambito sessione corrente** | Questa sessione: (a) crea il branch, (b) redige questo `piano.md`. L'implementazione parte **solo su richiesta esplicita dell'utente**, step per step. |
 | D4 | **Estetica** | Rivisitazione **leggera**, identità invariata: dark sport-editorial, Bebas Neue + JetBrains Mono, palette esistente (`--bg`, `--accent #d4ff4a`, `--bike #f4a261`, `--run #e63946`, ecc.). Niente redesign. |
 
-**Nota aperta (D2)**: definire il tie-break per il caso di parità esatta a 2.5 min (es. `x.5 → arrotonda per eccesso`). Decidere in fase di implementazione e documentare nel codice.
+**Nota (D2) — risolta**: arrotondamento ai 10 min con `Math.round(min/10)*10` → tie a metà (5 min) va per eccesso (half-up). Es.: 75→80, 25→30, 74→70. Confermato coi due esempi dell'utente.
 
 ---
 
@@ -83,12 +83,13 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Accettazione**: borraccia con 3 componenti → totali = somma. ✅ (test: carbo 90, sodio 600, caff 75, volume 500)
 - **Verifica**: test jsdom 17/17 — add di ogni formato, borraccia=somma, inventari separati, validazione nome vuoto, delete, persistenza dopo reload. Screenshot: form integrato nell'estetica.
 
-### Step 4 — Config frazione: cadenza, target, offset corsa, arrotondamento D2
-- [ ] Cadenza indipendente bici/corsa; target g/h, mg/h, ml/h indipendenti per frazione; niente target caffeina.
-- [ ] Bici: primo slot al primo tick di cadenza. Corsa: primo slot al **minuto personalizzato** (offset), poi cadenza.
-- [ ] Applicare arrotondamento durata D2 (multiplo di 5 min) alla durata usata per generare slot/totali.
-- **Accettazione**: slot bici partono al primo tick; slot corsa partono all'offset; durata arrotondata correttamente (test 5h03→5h00, 4h07→4h10).
-- **Verifica**: spec §criterio 2.
+### Step 4 — Config frazione: cadenza, target, offset corsa, arrotondamento D2 ✅
+- [x] Cadenza indipendente bici/corsa; target g/h, mg/h, ml/h indipendenti per frazione; nessun target caffeina (nota in UI).
+- [x] Bici: 1° slot al primo tick di cadenza. Corsa: 1° slot al **minuto personalizzato** (offset), poi cadenza. Nessun minuto 0 corsa.
+- [x] Arrotondamento durata D2 = **ai 10 min più vicini** (half-up), applicato a slot e totali. Config persistita (`fueling:config`). Preview live per frazione (durata arrotondata, slot, target).
+- **Accettazione**: slot bici dal primo tick; slot corsa dall'offset; arrotondamento corretto (5h03→5h00, 4h07→4h10). ✅
+- **Verifica**: test jsdom 16/16 — roundDuration(303)=300, (247)=250, (75)=80, (74)=70; bici 62→60 slot 20,40,60; corsa 52→50 offset10/cad15 slot 10,25,40; target scalano con la durata (90g@60min, 135g@90min); cadenze indipendenti; persistenza offset dopo reload. Screenshot: card a due colonne. (spec §2)
+- **API esposte** (per Step 6/7): `Fueling.roundDuration`, `Fueling.buildSlots(kind)`, `Fueling.fractionTargets(kind)`, `Fueling.getConfig()`.
 
 ### Step 5 — Righe manuali (colazione, pre-gara, minuto 0)
 - [ ] Tre righe con prodotto e orario a scelta; **fuori** dall'allocatore e **fuori** dai rate orari.
