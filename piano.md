@@ -105,13 +105,14 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Bugfix**: aggiunto `[hidden]{display:none!important}` — una regola d'autore (`.row{display:grid}`) batteva lo stile UA di `[hidden]`, lasciando visibile il campo "Minuto"; jsdom non lo rilevava (non calcola CSS), lo screenshot sì.
 - **API esposte**: `Fueling.resolveConstraint(vincolo, kind)`.
 
-### Step 7 — Allocatore greedy (Opzione A)
-- [ ] Ordine: (1) momenti precisi → (2) borracce a sorsi come base distribuita (rispettando prima/seconda metà) → (3) gap carbo con gel + mezze barrette → (4) gap sodio con capsule.
-- [ ] Rispettare sempre quantità disponibili e vincoli; **mai inventare prodotti** non in inventario.
-- [ ] Priorità: totale di frazione torna; per slot minimizzare scarto e **mostrare il delta** (es. "87 g/h, −3").
-- [ ] Deficit se inventario insufficiente: evidenziato a colore ("manca 1 gel, −25 g carbo").
-- **Accettazione**: con inventario sufficiente il totale carbo/sodio/liquidi coincide col target (±1 unità minima); con inventario insufficiente deficit a colore, nessun prodotto inventato.
-- **Verifica**: spec §criteri 5 e 6.
+### Step 7 — Allocatore greedy (Opzione A) ✅
+- [x] Ordine implementato: (1) momenti precisi (tutte le unità nello slot più vicino) → (2) borracce a sorsi distribuite uniformemente sugli slot ammessi (vincoli prima/seconda metà) → (3) gap carbo con gel + mezze barrette → (4) gap sodio con capsule.
+- [x] Rispetta quantità (residuo per prodotto, mezza barretta = 0.5) e vincoli; **mai inventa** (usage ≤ disponibile).
+- [x] Totale di frazione come àncora; per slot sceglie lo slot col deficit maggiore (minimizza scarto); delta per slot calcolato; greedy si ferma entro ±1 unità minima (piazza l'overshoot solo se avvicina: `val < 2·gap`).
+- [x] Deficit riportato e **evidenziato a colore** (rosso) con "Nessun prodotto inventato"; pannello "Piano calcolato" + bottone; snapshot `fueling:lastplan`.
+- **Accettazione**: inventario sufficiente → carbo/sodio/liquidi = target esatti; insufficiente → deficit colorato, nessuna invenzione. ✅
+- **Verifica**: test jsdom 20/20 — sufficiente (borraccia 30/300/500 + gel×3 + caps×2, target 90/500/500): carbo=90, sodio=500, liquidi=500 esatti, usa 2/3 gel, 1/2 caps, 1 borraccia, liquido = 500/3 per slot; insufficiente (1 gel): deficit carbo=30, usage≤disponibile, ok=false; momento "fine" → tutte le unità all'ultimo slot; prima_meta → solo slot ammessi ([20]); inventario vuoto → deficit pieno, nessun uso, nessun crash; mezza barretta. Rendering verificato (deficit colorato, lastplan persistito) + screenshot. (spec §5, §6)
+- **API esposte**: `Fueling.allocateFraction(kind)`, `Fueling.allocatePlan()`.
 
 ### Step 8 — Ricalcolo durata (diff)
 - [ ] Se la durata cambia (es. +30 min): mantenere **stessi rate orari e stesso mix**; allungare/accorciare tabella; aggiungere/togliere unità dai prodotti dell'inventario.

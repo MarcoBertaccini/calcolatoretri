@@ -375,6 +375,56 @@
   }
   .cfg-preview b { color: var(--accent); font-weight: 600; }
 
+  /* Piano calcolato */
+  .plan-result { margin-top: 18px; }
+  .plan-frac {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .plan-frac[data-d="bike"] { border-left-color: var(--bike); }
+  .plan-frac[data-d="run"]  { border-left-color: var(--run); }
+  .plan-frac-head {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .plan-frac-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+  .plan-line {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 5px 0;
+    align-items: baseline;
+  }
+  .plan-line .pk {
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 10px;
+  }
+  .plan-ok { color: var(--accent); }
+  .plan-bad { color: var(--run); font-weight: 600; }
+  .plan-deficit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--run);
+    border: 1px solid var(--run);
+    padding: 8px 12px;
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
   /* Righe manuali */
   .man-item {
     background: var(--bg);
@@ -879,6 +929,17 @@
 
       <div class="cfg-preview" id="manTotals"></div>
       <div class="fuel-note">Prodotto e orario a scelta. Queste righe <b>non entrano nell'allocatore</b> e <b>non contano nei rate orari</b>: compaiono solo nella tabella e nei totali della lista prodotti. Una riga conta se ha un prodotto o un valore &gt; 0.</div>
+    </div>
+
+    <!-- ===== PIANO CALCOLATO (allocatore) ===== -->
+    <div class="discipline" id="planCard">
+      <div class="d-header">
+        <div class="d-name">Piano calcolato</div>
+        <div class="d-num">FUELING / PLAN</div>
+      </div>
+      <button type="button" class="btn-primary" id="calcPlanBtn">Calcola piano</button>
+      <div id="planResult" class="plan-result"></div>
+      <div class="fuel-note">Allocatore greedy: colloca prima i vincoli «momento preciso», usa le borracce a sorsi come base distribuita sugli slot, chiude il gap carboidrati con gel e mezze barrette, poi il gap sodio con le capsule. Rispetta quantità e vincoli; non inventa prodotti. La tabella per slot e la lista prodotti completa arrivano allo Step 9.</div>
     </div>
   </section>
 
@@ -1712,6 +1773,206 @@
     }
 
     window.Fueling.resolveConstraint = resolveConstraint;
+  })();
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 7: allocatore greedy (Opzione A).
+     Ordine: (1) momenti precisi → (2) borracce a sorsi (base distribuita,
+     vincoli prima/seconda metà) → (3) gap carbo con gel + mezze barrette →
+     (4) gap sodio con capsule. Rispetta quantità e vincoli; non inventa nulla.
+     Priorità: il totale di frazione torna (±1 unità minima); per slot si
+     minimizza lo scarto. Deficit riportato se l'inventario non basta.
+     Le righe manuali NON entrano qui.
+     ========================================================================= */
+  (function () {
+    const F = window.Fueling;
+    const $ = id => document.getElementById(id);
+    const fmt = n => (Math.round(n * 10) / 10).toString();
+
+    // Slot ammessi per un prodotto in una frazione, dato il suo vincolo.
+    function allowedSlotsFor(prod, kind) {
+      const rc = F.resolveConstraint(prod.vincolo || { tipo: 'nessuno' }, kind);
+      if (rc.tipo === 'momento') return rc.nearestSlot != null ? [rc.nearestSlot] : [];
+      return rc.allowedSlots || [];
+    }
+
+    function allocateFraction(kind) {
+      const bs = F.buildSlots(kind);
+      const slots = bs.slots.slice();
+      const roundedMin = bs.roundedMin;
+      const ft = F.fractionTargets(kind); // {carbo_g, sodio_mg, liquidi_ml}
+      const nS = slots.length;
+
+      // Copia lavorativa inventario con quantità residua e totali per-unità.
+      const inv = (F.loadInv(kind) || []).map(p => ({
+        ref: p,
+        id: p.id, nome: p.nome, formato: p.formato, vincolo: p.vincolo,
+        rem: Math.max(0, Math.floor(p.quantita || 0)),
+        t: F.productTotals(p)
+      }));
+
+      const idxOf = {}; slots.forEach((s, i) => idxOf[s] = i);
+      const cells = slots.map(s => ({ slot: s, items: [], totals: { carbo: 0, sodio: 0, caff: 0, volume: 0 } }));
+
+      function addToSlot(slotMin, p, units) {
+        const i = idxOf[slotMin]; if (i == null || units <= 0) return;
+        const c = cells[i];
+        let it = c.items.find(x => x.productId === p.id);
+        if (!it) { it = { productId: p.id, nome: p.nome, formato: p.formato, units: 0, carbo: 0, sodio: 0, caff: 0, volume: 0 }; c.items.push(it); }
+        const add = (k, v) => { it[k] += v; c.totals[k] += v; };
+        it.units += units;
+        add('carbo', p.t.carbo_g * units);
+        add('sodio', p.t.sodio_mg * units);
+        add('caff', p.t.caffeina_mg * units);
+        add('volume', p.t.volume_ml * units);
+      }
+
+      const placed = totKey => cells.reduce((a, c) => a + c.totals[totKey], 0);
+
+      // (1) Momenti precisi: tutte le unità disponibili nello slot più vicino.
+      inv.forEach(p => {
+        if (p.rem <= 0 || !p.vincolo || p.vincolo.tipo !== 'momento') return;
+        const allowed = allowedSlotsFor(p, kind);
+        if (allowed.length === 0) return;
+        addToSlot(allowed[0], p, p.rem);
+        p.rem = 0;
+      });
+
+      // (2) Borracce a sorsi: distribuzione uniforme sugli slot ammessi.
+      inv.forEach(p => {
+        if (p.formato !== 'borraccia' || p.rem <= 0) return;
+        const allowed = allowedSlotsFor(p, kind);
+        if (allowed.length === 0) return;
+        const per = p.rem / allowed.length; // sorsi come frazione di borraccia per slot
+        allowed.forEach(s => addToSlot(s, p, per));
+        p.rem = 0;
+      });
+
+      // (3)/(4) Chiusura gap con unità discrete, minimizzando lo scarto per slot.
+      function fillGap(totKey, prodKey, formats, fractionTgt) {
+        if (fractionTgt <= 0 || nS === 0) return;
+        const perSlot = fractionTgt / nS;
+        let guard = 0;
+        while (guard++ < 10000) {
+          const gap = fractionTgt - placed(totKey);
+          if (gap <= 1e-6) break;
+          const cands = [];
+          inv.forEach(p => {
+            if (!formats.includes(p.formato) || p.rem <= 1e-9) return;
+            const val = p.t[prodKey]; if (val <= 0) return;
+            const allowed = allowedSlotsFor(p, kind);
+            if (allowed.length === 0) return;
+            cands.push({ p, size: 1, val, allowed });
+            if (p.formato === 'barretta' && p.rem >= 0.5) cands.push({ p, size: 0.5, val: val / 2, allowed });
+          });
+          if (cands.length === 0) break; // esaurito → resta deficit
+          cands.sort((a, b) => a.val - b.val);
+          // preferisci la più grande che non sfora il gap; altrimenti la più piccola se avvicina
+          let move = null;
+          for (let k = cands.length - 1; k >= 0; k--) { if (cands[k].val <= gap + 1e-9) { move = cands[k]; break; } }
+          if (!move) { const sm = cands[0]; if (sm.val < 2 * gap - 1e-9) move = sm; else break; }
+          // slot ammesso col deficit maggiore per questo nutriente
+          let bi = -1, bd = -Infinity;
+          move.allowed.forEach(s => { const i = idxOf[s]; if (i == null) return; const d = perSlot - cells[i].totals[totKey]; if (d > bd) { bd = d; bi = i; } });
+          if (bi < 0) break;
+          addToSlot(slots[bi], move.p, move.size);
+          move.p.rem -= move.size;
+        }
+      }
+
+      fillGap('carbo', 'carbo_g', ['gel', 'barretta'], ft.carbo_g);
+      fillGap('sodio', 'sodio_mg', ['capsula'], ft.sodio_mg);
+
+      // Totali e delta.
+      const totals = cells.reduce((a, c) => ({
+        carbo: a.carbo + c.totals.carbo, sodio: a.sodio + c.totals.sodio,
+        caff: a.caff + c.totals.caff, volume: a.volume + c.totals.volume
+      }), { carbo: 0, sodio: 0, caff: 0, volume: 0 });
+
+      const perSlot = {
+        carbo: nS ? ft.carbo_g / nS : 0,
+        sodio: nS ? ft.sodio_mg / nS : 0,
+        liquidi: nS ? ft.liquidi_ml / nS : 0
+      };
+      cells.forEach(c => {
+        c.delta = {
+          carbo: c.totals.carbo - perSlot.carbo,
+          sodio: c.totals.sodio - perSlot.sodio,
+          liquidi: c.totals.volume - perSlot.liquidi
+        };
+      });
+
+      const deficit = {
+        carbo: Math.max(0, ft.carbo_g - totals.carbo),
+        sodio: Math.max(0, ft.sodio_mg - totals.sodio),
+        liquidi: Math.max(0, ft.liquidi_ml - totals.volume)
+      };
+
+      // Uso prodotti (unità consumate = iniziale − residuo).
+      const usage = {};
+      inv.forEach(p => { const used = Math.max(0, Math.floor(p.ref.quantita || 0) - p.rem); if (used > 1e-9) usage[p.id] = used; });
+
+      return {
+        kind, roundedMin, slots, nSlots: nS,
+        fractionTargets: { carbo: ft.carbo_g, sodio: ft.sodio_mg, liquidi: ft.liquidi_ml },
+        perSlotTargets: perSlot,
+        cells, totals, deficit, usage,
+        ok: deficit.carbo < 1e-6 && deficit.sodio < 1e-6 && deficit.liquidi < 1e-6
+      };
+    }
+
+    function allocatePlan() {
+      return { bike: allocateFraction('bike'), run: allocateFraction('run') };
+    }
+
+    /* ---- Rendering compatto (la tabella completa è Step 9) ---- */
+    const KIND_LABEL = { bike: 'Bici', run: 'Corsa' };
+    function line(k, actual, target, unit, deficit) {
+      const cls = deficit > 1e-6 ? 'plan-bad' : 'plan-ok';
+      const delta = actual - target;
+      const deltaTxt = (delta >= 0 ? '+' : '') + fmt(delta);
+      return '<div class="plan-line"><span class="pk">' + k + '</span>' +
+        '<span class="' + cls + '">' + fmt(actual) + ' / ' + fmt(target) + ' ' + unit +
+        ' <span style="opacity:.7">(' + deltaTxt + ')</span></span></div>';
+    }
+    function renderFraction(pl) {
+      let h = '<div class="plan-frac" data-d="' + pl.kind + '">' +
+        '<div class="plan-frac-head">' + KIND_LABEL[pl.kind] + '</div>' +
+        '<div class="plan-frac-sub">durata ' + pl.roundedMin + ' min · ' + pl.nSlots + ' slot</div>' +
+        line('Carbo', pl.totals.carbo, pl.fractionTargets.carbo, 'g', pl.deficit.carbo) +
+        line('Sodio', pl.totals.sodio, pl.fractionTargets.sodio, 'mg', pl.deficit.sodio) +
+        line('Liquidi', pl.totals.volume, pl.fractionTargets.liquidi, 'ml', pl.deficit.liquidi) +
+        '<div class="plan-line"><span class="pk">Caffeina</span><span>' + fmt(pl.totals.caff) + ' mg <span style="opacity:.6">(nessun target)</span></span></div>';
+      const defs = [];
+      if (pl.deficit.carbo > 1e-6) defs.push('−' + fmt(pl.deficit.carbo) + ' g carbo');
+      if (pl.deficit.sodio > 1e-6) defs.push('−' + fmt(pl.deficit.sodio) + ' mg sodio');
+      if (pl.deficit.liquidi > 1e-6) defs.push('−' + fmt(pl.deficit.liquidi) + ' ml liquidi');
+      if (defs.length) h += '<div class="plan-deficit">⚠ Deficit (inventario insufficiente): ' + defs.join(' · ') + '. Nessun prodotto inventato.</div>';
+      h += '</div>';
+      return h;
+    }
+    function renderPlan(plan) {
+      $('planResult').innerHTML = renderFraction(plan.bike) + renderFraction(plan.run);
+    }
+
+    $('calcPlanBtn').addEventListener('click', () => {
+      const plan = allocatePlan();
+      renderPlan(plan);
+      // snapshot leggero per persistenza (ultimo piano).
+      try {
+        StorageAdapter.set('lastplan', {
+          ts: Date.now(),
+          bike: { totals: plan.bike.totals, deficit: plan.bike.deficit, usage: plan.bike.usage },
+          run: { totals: plan.run.totals, deficit: plan.run.deficit, usage: plan.run.usage }
+        });
+      } catch (e) { /* no-op */ }
+    });
+
+    // Esposto per test/verifica e per Step 8/9.
+    window.Fueling.allocateFraction = allocateFraction;
+    window.Fueling.allocatePlan = allocatePlan;
   })();
 </script>
 </body>
