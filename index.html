@@ -296,6 +296,51 @@
     letter-spacing: 0.04em;
   }
 
+  /* Piano Fueling */
+  .fueling {
+    margin-top: 64px;
+    padding-top: 40px;
+    border-top: 1px solid var(--line);
+  }
+  .section-head { margin-bottom: 24px; }
+  .fuel-h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(40px, 8vw, 68px);
+    line-height: 0.9;
+    letter-spacing: 0.01em;
+  }
+  .fuel-h2 .sub {
+    display: block;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 300;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+  .linklike {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .linklike:hover { color: var(--ink); }
+  .fuel-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    line-height: 1.5;
+    margin-top: 14px;
+  }
+
   @media (max-width: 480px) {
     .row { grid-template-columns: 1fr; }
     .presets { grid-template-columns: repeat(2, 1fr); }
@@ -431,6 +476,36 @@
   </div>
 
   <div class="breakdown" id="breakdown"></div>
+
+  <!-- ===== PIANO FUELING ===== -->
+  <section class="fueling" id="fueling" aria-labelledby="fuelingTitle">
+    <div class="section-head">
+      <div class="kicker">// Piano Fueling — v1</div>
+      <h2 id="fuelingTitle" class="fuel-h2">Piano<br>Fueling
+        <span class="sub">Carbo · Sodio · Liquidi · Caffeina — bici &amp; corsa</span>
+      </h2>
+    </div>
+
+    <div class="discipline" data-d="bike">
+      <div class="d-header">
+        <div class="d-name">Durate frazioni</div>
+        <div class="d-num">FUELING / DUR</div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="fuelBikeDur">Durata bici (min)</label>
+          <input type="number" id="fuelBikeDur" min="0" step="1" inputmode="numeric">
+          <div class="hint"><span id="fuelBikeHint">—</span> · <button type="button" class="linklike" id="fuelBikeSync">sync da calcolo</button></div>
+        </div>
+        <div class="field">
+          <label for="fuelRunDur">Durata corsa (min)</label>
+          <input type="number" id="fuelRunDur" min="0" step="1" inputmode="numeric">
+          <div class="hint"><span id="fuelRunHint">—</span> · <button type="button" class="linklike" id="fuelRunSync">sync da calcolo</button></div>
+        </div>
+      </div>
+      <div class="fuel-note">Durate in minuti, precompilate dal calcolo tempi e modificabili a mano. Dopo una modifica manuale il valore resta fisso: usa «sync da calcolo» per ripristinare quello calcolato.</div>
+    </div>
+  </section>
 
 </div>
 
@@ -636,6 +711,95 @@
   });
 
   setMode('preset');
+</script>
+
+<script>
+  /* =========================================================================
+     PIANO FUELING — Step 2: scaffold sezione + lettura durate
+     Legge le durate bici/corsa dal calcolatore SENZA toccarne la logica:
+     ricalcola dagli stessi input e ascolta i loro eventi (listener additivi).
+     Le durate sono editabili; dopo un edit manuale restano fisse (override)
+     finché l'utente non preme «sync da calcolo».
+     ========================================================================= */
+  (function () {
+    const bikeDurEl = document.getElementById('fuelBikeDur');
+    const runDurEl  = document.getElementById('fuelRunDur');
+    const bikeHint  = document.getElementById('fuelBikeHint');
+    const runHint   = document.getElementById('fuelRunHint');
+
+    const state = { bikeOverride: false, runOverride: false };
+
+    // Durate calcolate: stessa formula del calcolatore, sola lettura input.
+    function readBikeSec() {
+      const speed = parseFloat(document.getElementById('bikeSpeed').value) || 0;
+      const dist  = parseFloat(document.getElementById('bikeDist').value) || 0;
+      return speed > 0 ? (dist / speed) * 3600 : 0;
+    }
+    function readRunSec() {
+      const pace = parseTime(document.getElementById('runPace').value); // sec/km
+      const dist = parseFloat(document.getElementById('runDist').value) || 0;
+      return pace * dist;
+    }
+    const minsFromSec = sec => Math.round(sec / 60);
+
+    function refreshHints() {
+      bikeHint.textContent = 'calcolo: ' + minsFromSec(readBikeSec()) + ' min';
+      runHint.textContent  = 'calcolo: ' + minsFromSec(readRunSec()) + ' min';
+    }
+
+    function persist() {
+      StorageAdapter.set('durations', {
+        bikeMin: parseInt(bikeDurEl.value, 10) || 0,
+        runMin: parseInt(runDurEl.value, 10) || 0,
+        bikeOverride: state.bikeOverride,
+        runOverride: state.runOverride
+      });
+    }
+
+    // force=true ignora l'override (usato dal bottone sync) e lo azzera.
+    function syncBike(force) {
+      if (state.bikeOverride && !force) return;
+      state.bikeOverride = false;
+      bikeDurEl.value = minsFromSec(readBikeSec());
+      persist();
+    }
+    function syncRun(force) {
+      if (state.runOverride && !force) return;
+      state.runOverride = false;
+      runDurEl.value = minsFromSec(readRunSec());
+      persist();
+    }
+
+    // Ripristino stato salvato (override + eventuali valori manuali).
+    const saved = StorageAdapter.get('durations');
+    if (saved) {
+      state.bikeOverride = !!saved.bikeOverride;
+      state.runOverride  = !!saved.runOverride;
+    }
+
+    // Il calcolatore cambia => aggiorna le durate se non in override.
+    ['bikeSpeed', 'bikeDist'].forEach(id =>
+      document.getElementById(id).addEventListener('input', () => { syncBike(false); refreshHints(); }));
+    ['runPace', 'runDist'].forEach(id =>
+      document.getElementById(id).addEventListener('input', () => { syncRun(false); refreshHints(); }));
+    // Preset e toggle modalità cambiano le distanze via JS (nessun evento
+    // 'input'): riaggancio dopo il loro handler.
+    document.querySelectorAll('#presetBox button, .mode button').forEach(b =>
+      b.addEventListener('click', () => setTimeout(() => { syncBike(false); syncRun(false); refreshHints(); }, 0)));
+
+    // Edit manuale => override.
+    bikeDurEl.addEventListener('input', () => { state.bikeOverride = true; persist(); });
+    runDurEl.addEventListener('input', () => { state.runOverride = true; persist(); });
+
+    // Sync forzato dal bottone.
+    document.getElementById('fuelBikeSync').addEventListener('click', () => { syncBike(true); refreshHints(); });
+    document.getElementById('fuelRunSync').addEventListener('click', () => { syncRun(true); refreshHints(); });
+
+    // Init: se override salvato, ripristina il valore manuale; altrimenti popola.
+    if (saved && state.bikeOverride) bikeDurEl.value = saved.bikeMin; else syncBike(true);
+    if (saved && state.runOverride)  runDurEl.value  = saved.runMin;  else syncRun(true);
+    refreshHints();
+  })();
 </script>
 </body>
 </html>

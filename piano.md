@@ -71,11 +71,11 @@ Piano { ...snapshot risultato per diff su ricalcolo }
 - **Verifica**: round-trip `get/set/list/delete` testato con Node (stub); `fueling:__meta` = `{"schemaVersion":1}`. In browser: DevTools → Application → localStorage mostra `fueling:__meta`; reload mantiene lo stato.
 - **Note**: adapter esposto su `window.Fueling` per verifica manuale (nessuna UI in questo step, come da piano).
 
-### Step 2 — Sezione Fueling: scaffold + lettura durate
-- [ ] Nuova sezione "Piano Fueling" sotto il calcolatore esistente (non alterare quello esistente).
-- [ ] Campi durata bici/corsa **pre-popolati** leggendo il risultato del calcolatore, ma **editabili** manualmente.
-- **Accettazione**: cambiando i tempi nel calcolatore, le durate fueling si aggiornano finché l'utente non le sovrascrive.
-- **Verifica**: criterio di successo spec §1.
+### Step 2 — Sezione Fueling: scaffold + lettura durate ✅
+- [x] Nuova sezione "Piano Fueling" sotto il calcolatore esistente (esistente **non alterato**: durate lette ricalcolando dagli stessi input, listener additivi — nessuna modifica a `calc()`).
+- [x] Campi durata bici/corsa (in minuti) **pre-popolati** dal calcolatore, **editabili**; override manuale con bottone «sync da calcolo» per ripristinare; stato salvato via `StorageAdapter` (`fueling:durations`).
+- **Accettazione**: cambiando i tempi nel calcolatore le durate fueling si aggiornano finché l'utente non le sovrascrive. ✅
+- **Verifica**: simulazione Node (DOM stub) — init bici 38/corsa 25; bici 40 km → 75; override corsa 60 tiene al cambio distanza; «sync» ripristina 50; persistenza OK. Screenshot: sezione integrata nell'estetica esistente. (spec §1)
 
 ### Step 3 — CRUD prodotti + inventari separati
 - [ ] Form prodotto (campi modello §2); lista prodotti; inventari **bici** e **corsa** distinti.
